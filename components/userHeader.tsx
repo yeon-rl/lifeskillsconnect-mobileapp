@@ -1,7 +1,7 @@
 import { useThemedColors } from "@/hooks/use-themed-colors";
 import { useRouter } from "expo-router";
 import React from "react";
-import { Image, Pressable, View } from "react-native";
+import { Image, Platform, Pressable, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { ThemedText } from "./themed-text";
 import { ThemedView } from "./themed-view";
@@ -17,7 +17,11 @@ const UserHeader = () => {
   };
 
   return (
-    <ThemedView>
+    <ThemedView
+      style={{
+        paddingTop: Platform.OS === "android" ? 10 : 0, // Extra breathing room for Android top bar
+      }}
+    >
       <View className="flex-row justify-between">
         <View className="flex-row gap-2">
           <View className="w-[40px] h-[40px] rounded-full bg-gray-200 overflow-hidden">

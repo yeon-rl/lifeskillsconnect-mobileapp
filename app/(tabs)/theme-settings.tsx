@@ -1,10 +1,35 @@
 import { useTheme } from '@/context/ThemeContext';
 import { useThemedColors } from '@/hooks/use-themed-colors';
-import { StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { useUserStore } from '@/store/userStore';
+import { useRouter } from 'expo-router';
+import { Alert, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 
 export default function ThemeSettings() {
   const { themeMode, setThemeMode, isDark } = useTheme();
   const colors = useThemedColors();
+  const router = useRouter();
+  const logout = useUserStore((state) => state.logout);
+
+  const handleLogout = () => {
+    Alert.alert(
+      "Logout",
+      "Are you sure you want to log out?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        { 
+          text: "Logout", 
+          style: "destructive",
+          onPress: () => {
+            logout();
+            router.replace('/(auth)/login');
+          }
+        }
+      ]
+    );
+  };
 
   const handleThemeModeChange = (mode: 'light' | 'dark' | 'system') => {
     setThemeMode(mode);
@@ -93,6 +118,17 @@ export default function ThemeSettings() {
           </TouchableOpacity>
         </View>
       </View>
+
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Account</Text>
+        
+        <TouchableOpacity 
+          style={[styles.logoutButton, { backgroundColor: colors.bglight01, borderColor: colors.gray300 }]}
+          onPress={handleLogout}
+        >
+          <Text style={[styles.logoutText, { color: '#ef4444' }]}>Logout</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -154,6 +190,19 @@ const styles = StyleSheet.create({
   },
   themeOptionText: {
     fontSize: 14,
+    fontWeight: '600',
+  },
+  logoutButton: {
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  logoutText: {
+    fontSize: 16,
     fontWeight: '600',
   },
 });

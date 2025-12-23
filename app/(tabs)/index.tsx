@@ -22,7 +22,7 @@ export default function HomeScreen() {
 
   return (
     <ThemedView style={{ flex: 1 }} className="px-4">
-      <SafeAreaView style={{ paddingBottom: 0, marginBottom: 0 }}>
+      <SafeAreaView edges={["top"]} style={{marginBottom: 12}}>
         {/* User Header */}
         <UserHeader />
       </SafeAreaView>
@@ -30,7 +30,6 @@ export default function HomeScreen() {
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         contentInsetAdjustmentBehavior="never"
-        style={{ marginTop: -8 }}
       >
         <View className="mb-6">
           {!isPremiumUser ? (

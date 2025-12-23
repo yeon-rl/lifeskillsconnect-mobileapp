@@ -7,11 +7,13 @@ export type Language = 'en' | 'es' | 'fr' | 'de' | 'pt';
 interface OnboardingState {
   // State
   hasCompletedOnboarding: boolean;
+  hasCompletedLanguageSelection: boolean;
   selectedLanguage: Language;
   isLoading: boolean;
 
   // Actions
   setHasCompletedOnboarding: (value: boolean) => void;
+  setHasCompletedLanguageSelection: (value: boolean) => void;
   setSelectedLanguage: (language: Language) => void;
   setLoading: (loading: boolean) => void;
   resetOnboarding: () => void;
@@ -22,6 +24,7 @@ export const useOnboardingStore = create<OnboardingState>()(
     (set) => ({
       // Initial state
       hasCompletedOnboarding: false,
+      hasCompletedLanguageSelection: false,
       selectedLanguage: 'en',
       isLoading: false,
 
@@ -29,6 +32,11 @@ export const useOnboardingStore = create<OnboardingState>()(
       setHasCompletedOnboarding: (value) =>
         set({
           hasCompletedOnboarding: value,
+        }),
+
+      setHasCompletedLanguageSelection: (value) =>
+        set({
+          hasCompletedLanguageSelection: value,
         }),
 
       setSelectedLanguage: (language) =>
@@ -44,6 +52,7 @@ export const useOnboardingStore = create<OnboardingState>()(
       resetOnboarding: () =>
         set({
           hasCompletedOnboarding: false,
+          hasCompletedLanguageSelection: false,
           selectedLanguage: 'en',
         }),
     }),

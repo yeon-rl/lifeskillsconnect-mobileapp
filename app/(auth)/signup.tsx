@@ -6,15 +6,15 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
-  FlatList,
-  Image,
-  Modal,
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  TextInput,
-  View,
+    FlatList,
+    Image,
+    Modal,
+    Pressable,
+    ScrollView,
+    TextInput,
+    View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 
 type SignupStep = "email" | "otp" | "account" | "interests" | "success";

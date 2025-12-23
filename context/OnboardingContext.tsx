@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, {
   createContext,
   ReactNode,
@@ -10,10 +11,12 @@ type Language = "en" | "es" | "fr" | "de" | "pt";
 
 interface OnboardingContextType {
   hasCompletedOnboarding: boolean;
+  hasCompletedLanguageSelection: boolean;
   selectedLanguage: Language | null;
   setHasCompletedOnboarding: (value: boolean) => void;
+  setHasCompletedLanguageSelection: (value: boolean) => void;
   setSelectedLanguage: (language: Language) => void;
-  isLoading: boolean;
+  isHydrated: boolean;
 }
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(
@@ -23,47 +26,96 @@ const OnboardingContext = createContext<OnboardingContextType | undefined>(
 export function OnboardingProvider({ children }: { children: ReactNode }) {
   const [hasCompletedOnboarding, setHasCompletedOnboarding] =
     useState<boolean>(false);
+  const [hasCompletedLanguageSelection, setHasCompletedLanguageSelection] =
+    useState<boolean>(false);
   const [selectedLanguage, setSelectedLanguage] = useState<Language | null>(
     null
   );
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isHydrated, setIsHydrated] = useState<boolean>(false);
 
   // Initialize from storage on app start
   useEffect(() => {
     const initializeOnboarding = async () => {
       try {
-        // TODO: Load from AsyncStorage or your backend
-        // For now, default to not completed
-        setHasCompletedOnboarding(false);
-        setSelectedLanguage("en");
+        const keys = [
+          "hasCompletedOnboarding",
+          "selectedLanguage",
+          "hasCompletedLanguageSelection",
+        ];
+        const stores = await AsyncStorage.multiGet(keys);
+        const map = Object.fromEntries(stores);
+
+        const savedOnboarding = map["hasCompletedOnboarding"];
+        const savedLanguage = map["selectedLanguage"];
+        const savedLanguageSelection = map["hasCompletedLanguageSelection"];
+
+        console.log("[OnboardingContext] Loaded values:", {
+          savedOnboarding,
+          savedLanguage,
+          savedLanguageSelection,
+        });
+
+        if (savedOnboarding === "true") {
+          setHasCompletedOnboarding(true);
+        }
+        
+        if (savedLanguageSelection === "true") {
+          setHasCompletedLanguageSelection(true);
+        }
+
+        if (savedLanguage) {
+          setSelectedLanguage(savedLanguage as Language);
+        } else {
+          setSelectedLanguage("en");
+        }
       } catch (error) {
-        console.error("Failed to load onboarding status:", error);
+        console.error("[OnboardingContext] Failed to load onboarding status:", error);
       } finally {
-        setIsLoading(false);
+        setIsHydrated(true);
       }
     };
 
     initializeOnboarding();
   }, []);
 
-  const handleSetHasCompletedOnboarding = (value: boolean) => {
-    setHasCompletedOnboarding(value);
-    // TODO: Persist to storage
+
+  const handleSetHasCompletedOnboarding = async (value: boolean) => {
+    try {
+      setHasCompletedOnboarding(value);
+      await AsyncStorage.setItem("hasCompletedOnboarding", String(value));
+    } catch (error) {
+      console.error("Failed to save onboarding status:", error);
+    }
   };
 
-  const handleSetSelectedLanguage = (language: Language) => {
-    setSelectedLanguage(language);
-    // TODO: Persist to storage
+  const handleSetHasCompletedLanguageSelection = async (value: boolean) => {
+    try {
+      setHasCompletedLanguageSelection(value);
+      await AsyncStorage.setItem("hasCompletedLanguageSelection", String(value));
+    } catch (error) {
+      console.error("Failed to save language selection status:", error);
+    }
+  };
+
+  const handleSetSelectedLanguage = async (language: Language) => {
+    try {
+      setSelectedLanguage(language);
+      await AsyncStorage.setItem("selectedLanguage", language);
+    } catch (error) {
+      console.error("Failed to save language choice:", error);
+    }
   };
 
   return (
     <OnboardingContext.Provider
       value={{
         hasCompletedOnboarding,
+        hasCompletedLanguageSelection,
         selectedLanguage,
         setHasCompletedOnboarding: handleSetHasCompletedOnboarding,
+        setHasCompletedLanguageSelection: handleSetHasCompletedLanguageSelection,
         setSelectedLanguage: handleSetSelectedLanguage,
-        isLoading,
+        isHydrated,
       }}
     >
       {children}

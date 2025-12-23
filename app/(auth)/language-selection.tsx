@@ -2,7 +2,7 @@ import { ThemedText } from "@/components/themed-text";
 import { useOnboarding } from "@/context/OnboardingContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useThemedColors } from "@/hooks/use-themed-colors";
-import { useRouter } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import React from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
@@ -23,8 +23,13 @@ const languages: LanguageOption[] = [
 ];
 
 export default function LanguageSelectionScreen() {
-  const { setSelectedLanguage } = useOnboarding();
+  const { setSelectedLanguage, setHasCompletedLanguageSelection, hasCompletedLanguageSelection } = useOnboarding();
   const router = useRouter();
+  
+  if (hasCompletedLanguageSelection) {
+    return <Redirect href="/(auth)/login" />;
+  }
+
   const [selectedLang, setSelectedLang] = React.useState<Language>("en");
 
   const colors = useThemedColors();
@@ -36,6 +41,7 @@ export default function LanguageSelectionScreen() {
 
   const handleContinue = () => {
     setSelectedLanguage(selectedLang);
+    setHasCompletedLanguageSelection(true);
     router.push("/(auth)/login");
   };
 

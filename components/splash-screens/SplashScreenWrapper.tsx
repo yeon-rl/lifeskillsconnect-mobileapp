@@ -8,15 +8,19 @@ import { PremiumUserSplash } from "./PremiumUserSplash";
 interface SplashScreenWrapperProps {
   onSplashHide?: () => void;
   splashDuration?: number;
+  isReady?: boolean;
 }
 
 export function SplashScreenWrapper({
   onSplashHide,
   splashDuration = 2500,
+  isReady = true,
 }: SplashScreenWrapperProps) {
   const { isPremium } = useUser();
 
   useEffect(() => {
+    if (!isReady) return;
+
     const hideSplash = async () => {
       try {
         await SplashScreen.hideAsync();
@@ -29,7 +33,7 @@ export function SplashScreenWrapper({
     const timer = setTimeout(hideSplash, splashDuration);
 
     return () => clearTimeout(timer);
-  }, [splashDuration, onSplashHide]);
+  }, [splashDuration, onSplashHide, isReady]);
 
   return (
     <View style={{ flex: 1 }}>

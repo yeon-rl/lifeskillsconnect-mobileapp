@@ -4,8 +4,9 @@ import { useThemedColors } from "@/hooks/use-themed-colors";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import React from "react";
-import { FlatList, Pressable, SafeAreaView, View } from "react-native";
+import { FlatList, Pressable, View } from "react-native";
 import Animated, { FadeInRight, FadeOutRight } from "react-native-reanimated";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
 export default function NotificationsScreen() {
