@@ -12,7 +12,8 @@ export type ThemedTextProps = TextProps & {
     | "subtitle"
     | "link"
     | "small"
-    | "small14";
+    | "small14"
+    | "colorGreen";
 };
 
 export function ThemedText({
@@ -35,6 +36,7 @@ export function ThemedText({
         type === "link" ? styles.link : undefined,
         type === "small" ? styles.small : undefined,
         type === "small14" ? styles.small14 : undefined,
+        type === "colorGreen" ? styles.colorGreen : undefined,
         style,
       ]}
       {...rest}
@@ -74,4 +76,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
+  colorGreen: {
+    color: "#5A7C65"
+  }
 });

@@ -1,4 +1,4 @@
-import { Tabs } from "expo-router";
+import { Tabs, useRouter } from "expo-router";
 import React from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Defs, LinearGradient, Path, Stop } from "react-native-svg";
@@ -12,6 +12,7 @@ export default function TabLayout() {
   const colorScheme = useColorScheme();
   const colors = useThemedColors();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
 
   const TAB_BAR_HEIGHT = 60;
 
@@ -107,9 +108,9 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="theme-settings"
+          name="profile"
           options={{
-            title: "Settings",
+            title: "Profile",
             tabBarIcon: ({ color, focused }) => (
               <Svg
                 width="20"
@@ -153,7 +154,7 @@ export default function TabLayout() {
           zIndex: 1000,
         }}
         onPress={() => {
-             console.log("Chat clicked");
+             router.push("/mentor-chat");
         }}
         activeOpacity={0.8}
       >

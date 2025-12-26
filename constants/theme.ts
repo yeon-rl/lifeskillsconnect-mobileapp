@@ -39,6 +39,9 @@ export const Colors = {
     tag: "#4285F4",
     bglight10: "#5A7C651A",
     bglight01: "#5A7C6505",
+    inputBg: "#5A7C6505",
+    backgroundBg: "#5A7C6505",
+    modalBg: "#ffffff"
   },
   dark: {
     text: "#ECEDEE",
@@ -56,7 +59,7 @@ export const Colors = {
     white: white,
     gray300: "#4b5563",
     gray700: "#a1a9b3",
-    input: "#5A7C6505",
+    input: "#5A7C6505", 
     input50: "#5A7C6540",
     transparent: "transparent",
     error: "#FF3B30",
@@ -65,6 +68,9 @@ export const Colors = {
     tag: "#4285F4",
     bglight10: "#5A7C651A",
     bglight01: "#5A7C6505",
+    inputBg: "#5A7C6526",
+    backgroundBg: "#5A7C6526",
+    modalBg: "#090C0A"
   },
 };
 

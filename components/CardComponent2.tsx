@@ -26,6 +26,8 @@ const CardComponent2 = ({
         backgroundColor: colors.bglight01,
         borderRadius: 12,
         width: 180,
+        height: "auto",
+        paddingBottom: 12,
       }}
     >
       {/* Course Image */}
@@ -40,34 +42,36 @@ const CardComponent2 = ({
         />
       </View>
 
-      <View className="px-3">
-        {/* Title */}
-        <ThemedText
-          className="font-semibold text-base mb-1"
-          numberOfLines={2}
-          style={{ color: colors.text }}
-          type="small"
-        >
-          {title}
-        </ThemedText>
+      <View className="px-3" style={{ flex: 1, justifyContent: "space-between" }}>
+        <View>
+          {/* Title */}
+          <ThemedText
+            className="font-semibold text-base mb-1"
+            numberOfLines={2}
+            style={{ color: colors.text }}
+            type="small"
+          >
+            {title}
+          </ThemedText>
 
-        {/* Rating and Reviews */}
-        <View className="flex-row items-center gap-1 mb-2">
-          <Ionicons name="star" size={14} color="#FBBC05" />
-          <ThemedText
-            className="font-semibold text-sm"
-            style={{ color: colors.textSecondary }}
-            type="small"
-          >
-            {rating}
-          </ThemedText>
-          <ThemedText
-            className="text-xs"
-            style={{ color: colors.textSecondary }}
-            type="small"
-          >
-            - {reviews} Reviews
-          </ThemedText>
+          {/* Rating and Reviews */}
+          <View className="flex-row items-center gap-1 mb-2">
+            <Ionicons name="star" size={14} color="#FBBC05" />
+            <ThemedText
+              className="font-semibold text-sm"
+              style={{ color: colors.textSecondary }}
+              type="small"
+            >
+              {rating}
+            </ThemedText>
+            <ThemedText
+              className="text-xs"
+              style={{ color: colors.textSecondary }}
+              type="small"
+            >
+              - {reviews} Reviews
+            </ThemedText>
+          </View>
         </View>
 
         {/* View Module Button */}

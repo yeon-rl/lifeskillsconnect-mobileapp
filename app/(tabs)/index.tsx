@@ -13,11 +13,13 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import UserHeader from "@/components/userHeader";
 import { useThemedColors } from "@/hooks/use-themed-colors";
+import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
 
 export default function HomeScreen() {
   const colors = useThemedColors();
+  const router = useRouter();
   const [isPremiumUser] = React.useState(false); // Set to true for premium users
 
   return (
@@ -163,30 +165,35 @@ export default function HomeScreen() {
                   title="Financial Literacy"
                   lessons={15}
                   progress={65}
+                  onContinue={() => router.push("/module-detail/1")}
                 />
                 <View className="w-3" />
                 <CardComponent
                   title="Career Development"
                   lessons={12}
                   progress={45}
+                  onContinue={() => router.push("/module-detail/2")}
                 />
                 <View className="w-3" />
                 <CardComponent
                   title="Digital Marketing"
                   lessons={18}
                   progress={80}
+                  onContinue={() => router.push("/module-detail/3")}
                 />
                 <View className="w-3" />
                 <CardComponent
                   title="Communication Skills"
                   lessons={10}
                   progress={30}
+                  onContinue={() => router.push("/module-detail/4")}
                 />
                 <View className="w-3" />
                 <CardComponent
                   title="Time Management"
                   lessons={8}
                   progress={50}
+                  onContinue={() => router.push("/module-detail/5")}
                 />
               </ScrollView>
             </View>
@@ -268,7 +275,7 @@ export default function HomeScreen() {
                       180 pts
                     </ThemedText>
                   </View>
-                  <Pressable>
+                  <Pressable onPress={() => router.push("/reward-points")}>
                     <Image
                       source={require("../../assets/images/arrowRight.png")}
                       className="w-[50px] h-[50px] rounded-2xl"
@@ -305,13 +312,25 @@ export default function HomeScreen() {
                 decelerationRate="fast"
                 snapToInterval={300}
               >
-                <CardComponent2 />
+                <CardComponent2
+                  title="Interview and workplace skills"
+                  onViewModule={() => router.push("/all-module-detail/1")}
+                />
                 <View className="w-3" />
-                <CardComponent2 />
+                <CardComponent2
+                  title="Effective Communication"
+                  onViewModule={() => router.push("/all-module-detail/2")}
+                />
                 <View className="w-3" />
-                <CardComponent2 />
+                <CardComponent2
+                  title="Teamwork and Collaboration"
+                  onViewModule={() => router.push("/all-module-detail/3")}
+                />
                 <View className="w-3" />
-                <CardComponent2 />
+                <CardComponent2
+                  title="Problem Solving"
+                  onViewModule={() => router.push("/all-module-detail/4")}
+                />
               </ScrollView>
             </View>
           </View>

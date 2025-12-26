@@ -27,6 +27,7 @@ const CardComponent: React.FC<CardComponentProps> = ({
         padding: 12,
         borderRadius: 12,
         width: 280,
+        height: "auto",
       }}
     >
       {/* Course Image */}
@@ -34,71 +35,65 @@ const CardComponent: React.FC<CardComponentProps> = ({
         <Image source={image} className="w-full h-full" resizeMode="cover" />
       </View>
 
-      {/* Course Title */}
-      <ThemedText
-        className="font-semibold text-base mb-2"
-        numberOfLines={1}
-        type="small14"
-      >
-        {title}
-      </ThemedText>
-
-      {/* Progress Bar */}
-      <View className="mb-3">
-        {/* <View className="flex-row justify-between mb-1">
-          <ThemedText type="small" className="font-semibold">
-            Progress
-          </ThemedText>
-          <ThemedText type="small" style={{ color: colors.primary }}>
-            {progress}%
-          </ThemedText>
-        </View> */}
-        <View
-          style={{
-            height: 6,
-            backgroundColor: colors.gray300,
-            borderRadius: 3,
-            overflow: "hidden",
-          }}
-          className="mt-2"
-        >
-          <View
-            style={{
-              height: "100%",
-              width: `${progress}%`,
-              backgroundColor: colors.primary,
-              borderRadius: 3,
-            }}
-          />
-        </View>
-      </View>
-
-      <View className="flex-row items-center justify-between">
-        {/* Continue Button */}
-        <Pressable
-          onPress={onContinue}
-          className="rounded-lg py-3 items-center flex-row justify-center gap-2"
-          style={{ backgroundColor: colors.primary }}
-        >
+      <View style={{ flex: 1, justifyContent: "space-between" }}>
+        <View>
+          {/* Course Title */}
           <ThemedText
-            className="text-white font-semibold px-5"
-            type="small"
-            style={{ color: colors.background }}
-          >
-            Continue
-          </ThemedText>
-          {/* <Ionicons name="arrow-forward" size={16} color="white" /> */}
-        </Pressable>
-        {/* Lessons Count */}
-        <View className="flex-row items-center gap-1 mb-3">
-          {/* <Ionicons name="book" size={14} color={colors.gray700} /> */}
-          <ThemedText
+            className="font-semibold text-base mb-2"
+            numberOfLines={2}
             type="small14"
-            style={{ color: colors.green }}
-            className="font-semibold"
           >
-            {lessons} lessons
+            {title}
           </ThemedText>
+
+          {/* Progress Bar */}
+          <View className="mb-3">
+            <View
+              style={{
+                height: 6,
+                backgroundColor: colors.gray300,
+                borderRadius: 3,
+                overflow: "hidden",
+              }}
+              className="mt-2"
+            >
+              <View
+                style={{
+                  height: "100%",
+                  width: `${progress}%`,
+                  backgroundColor: colors.primary,
+                  borderRadius: 3,
+                }}
+              />
+            </View>
+          </View>
+        </View>
+
+        <View className="flex-row items-center justify-between">
+          {/* Continue Button */}
+          <Pressable
+            onPress={onContinue}
+            className="rounded-lg py-3 items-center flex-row justify-center gap-2"
+            style={{ backgroundColor: colors.primary }}
+          >
+            <ThemedText
+              className="text-white font-semibold px-5"
+              type="small"
+              style={{ color: colors.background }}
+            >
+              Continue
+            </ThemedText>
+          </Pressable>
+          {/* Lessons Count */}
+          <View className="flex-row items-center gap-1">
+            <ThemedText
+              type="small14"
+              style={{ color: colors.green }}
+              className="font-semibold"
+            >
+              {lessons} lessons
+            </ThemedText>
+          </View>
         </View>
       </View>
     </View>
