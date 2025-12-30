@@ -1,19 +1,19 @@
 import { ThemedText } from "@/components/themed-text";
 import ThemedView from "@/components/themedView";
 import { useThemedColors } from "@/hooks/use-themed-colors";
+import { authService } from "@/services/api/apiServices";
+import { useUserStore } from "@/store/userStore";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Image, Modal, Pressable, TextInput, View } from "react-native";
+import { Image, Pressable, TextInput, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
+import { toast } from 'sonner-native';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [modalType, setModalType] = useState<"success" | "error" | null>(null);
-  const [modalMessage, setModalMessage] = useState("");
   const colors = useThemedColors();
 
   const router = useRouter();
@@ -25,32 +25,50 @@ export default function LoginScreen() {
 
   const buttonBackgroundColor = isFormValid ? "#5A7C65" : "#5A7C651A";
 
-  const showModal = (type: "success" | "error", message: string) => {
-    setModalType(type);
-    setModalMessage(message);
-    setModalVisible(true);
-  };
+  // Removed local modal helper in favor of Sonner toasts
 
-  const handleSignIn = () => {
+  const { login: storeLogin } = useUserStore();
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSignIn = async () => {
     // Validate email
     if (!isEmailValid) {
-      showModal("error", "Please enter a valid email address");
+      toast.error("Please enter a valid email address");
       return;
     }
 
     // Validate password
     if (!isPasswordValid) {
-      showModal("error", "Password must be at least 6 characters");
+      toast.error("Password must be at least 6 characters");
       return;
     }
 
-    // Simulate successful login (replace with actual API call)
-    showModal("success", "Login successful!");
-    // Navigate after successful login
-    setTimeout(() => {
-      setModalVisible(false);
-      router.push("/(tabs)");
-    }, 1500);
+    setIsLoading(true);
+    try {
+      const response = await authService.login({ email, password });
+      
+      // Assuming response contains user and token
+      // You might need to adjust this based on your API's response structure
+      const { user, token } = response.data || response; 
+      
+      if (token && user) {
+        storeLogin(user, token);
+        toast.success("Login successful!");
+        // Navigation will be handled by navigation guards in _layout.tsx
+        // but adding a backup navigation here
+        setTimeout(() => {
+          router.replace("/(tabs)");
+        }, 1500);
+      } else {
+        throw new Error("Invalid response from server");
+      }
+    } catch (error: any) {
+      // Errors are now handled by the apiClient interceptor
+      // We only log here for additional context if needed
+      console.error("Login component error:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -155,14 +173,14 @@ export default function LoginScreen() {
       <Pressable
         style={{ backgroundColor: buttonBackgroundColor }}
         className="rounded-lg py-4 items-center mb-4"
-        disabled={!isFormValid}
+        disabled={!isFormValid || isLoading}
         onPress={handleSignIn}
       >
         <ThemedText
           className="font-semibold text-base"
           style={{ color: isFormValid ? "#fff" : "#5A7C65" }}
         >
-          Sign In
+          {isLoading ? "Signing In..." : "Sign In"}
         </ThemedText>
       </Pressable>
 
@@ -249,61 +267,6 @@ export default function LoginScreen() {
         </Pressable>
       </View>
 
-      {/* Success/Error Modal */}
-      <Modal
-        visible={modalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View
-          className="flex-1 justify-center items-center"
-          style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }}
-        >
-          <View
-            className="w-80 rounded-lg p-6 items-center"
-            style={{ backgroundColor: colors.background }}
-          >
-            {/* Icon */}
-            <Ionicons
-              name={
-                modalType === "success" ? "checkmark-circle" : "close-circle"
-              }
-              size={60}
-              color={modalType === "success" ? "#10b981" : "#ef4444"}
-            />
-
-            {/* Message */}
-            <ThemedText
-              className="text-center font-semibold text-lg mt-4"
-              style={{ color: colors.text }}
-            >
-              {modalType === "success" ? "Success" : "Error"}
-            </ThemedText>
-
-            <ThemedText
-              className="text-center mt-2 text-sm"
-              style={{ color: colors.gray700 }}
-            >
-              {modalMessage}
-            </ThemedText>
-
-            {/* Close Button */}
-            <Pressable
-              onPress={() => setModalVisible(false)}
-              className="mt-6 px-8 py-2 rounded-lg"
-              style={{
-                backgroundColor:
-                  modalType === "success" ? "#10b981" : "#ef4444",
-              }}
-            >
-              <ThemedText className="text-white font-semibold">
-                {modalType === "success" ? "Continue" : "Try Again"}
-              </ThemedText>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
     </ThemedView>
   );
 }

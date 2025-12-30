@@ -5,18 +5,36 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 export interface User {
   id: string;
   email: string;
-  first_name: string;
-  last_name: string;
-  phone_number?: string;
+  userId: number;
+  fullname: string;
+  username: string;
+  phone: string;
   date_of_birth?: string;
-  profile_picture?: string;
   notifications_enabled: boolean;
   is_premium: boolean;
   reward_level?: string;
   total_points?: number;
-  created_at?: string;
-  updated_at?: string;
+  howHeard: string;
+  nationality: string;
+  userImage: string | null;
+  preferred_language: string;
+  country?: {
+    name: string;
+    code: string;
+    dial: string;
+    flag: string;
+  };
+
+  totalPoints?: number;
+  watchedCourses?: {
+    courseId: string;
+    courseName: string;
+    points: number;
+    completedAt: string;
+  }[];
 }
+
+
 
 interface UserState {
   // State

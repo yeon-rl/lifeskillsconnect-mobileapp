@@ -11,3 +11,5 @@ export type { ThemeMode } from './themeStore';
 export { useNotificationStore } from './notificationStore';
 export type { Notification, NotificationCategory } from './notificationStore';
 
+export { useUiStore } from './uiStore';
+

@@ -1,4 +1,5 @@
 import { useThemedColors } from "@/hooks/use-themed-colors";
+import { useUserStore } from "@/store/userStore";
 import { useRouter } from "expo-router";
 import React from "react";
 import { Image, Platform, Pressable, View } from "react-native";
@@ -11,6 +12,8 @@ const UserHeader = () => {
   const colors = useThemedColors();
   const router = useRouter();
   const [hasNotifications] = React.useState(true); // Set to true when there are new notifications
+
+  const { currentUser } = useUserStore();
 
   const handleNotificationPress = () => {
     router.push("/notifications");
@@ -26,16 +29,22 @@ const UserHeader = () => {
         <View className="flex-row gap-2">
           <View className="w-[40px] h-[40px] rounded-full bg-gray-200 overflow-hidden">
             <Image
-              source={require("@/assets/images/userAvatar.png")}
-              className="w-[40px] h-[40px] rounded-2xl"
-              resizeMode="contain"
+              source={
+                currentUser?.userImage
+                  ? { uri: currentUser.userImage }
+                  : require("@/assets/images/userAvatar.png")
+              }
+              className="w-full h-full rounded-2xl"
+              resizeMode="cover"
             />
           </View>
           <View>
             <ThemedText style={{ color: colors.textSecondary }} type="small">
-              Hey {name}, ready to grow today?
+              Hey {currentUser?.username}, ready to grow today?
             </ThemedText>
-            <ThemedText className="font-bold">{name}</ThemedText>
+            <ThemedText className="font-bold">
+              {currentUser?.fullname?.split(" ")[0]}
+            </ThemedText>
           </View>
         </View>
         <View className="flex-row gap-2">

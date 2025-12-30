@@ -1,5 +1,6 @@
 import { useTheme } from '@/context/ThemeContext';
 import { useThemedColors } from '@/hooks/use-themed-colors';
+import { useUserStore } from '@/store';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -12,12 +13,14 @@ export default function EditProfile() {
   const router = useRouter();
   const { themeMode } = useTheme();
 
-  const [name, setName] = useState('John Okoro');
-  const [email, setEmail] = useState('johnokoro@gmail.com');
-  const [mobile, setMobile] = useState('+234 8072219794');
-  const [location, setLocation] = useState('London');
-  const [paramLanguage, setParamLanguage] = useState('English');
-  const [image, setImage] = useState<string | null>(null);
+  const { currentUser } = useUserStore();
+
+  const [name, setName] = useState(currentUser?.fullname ?? '');
+  const [email, setEmail] = useState(currentUser?.email ?? '');
+  const [mobile, setMobile] = useState(currentUser?.phone ?? '');
+  const [location, setLocation] = useState(currentUser?.nationality ?? '');
+  const [paramLanguage, setParamLanguage] = useState(currentUser?.preferred_language ?? '');
+  const [image, setImage] = useState<string | null>(currentUser?.userImage ?? null);
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({

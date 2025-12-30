@@ -1,6 +1,7 @@
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { useTheme } from '@/context/ThemeContext';
 import { useThemedColors } from '@/hooks/use-themed-colors';
+import { useUserStore } from '@/store/userStore';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
@@ -44,6 +45,14 @@ export default function Profile() {
 
   const handleThemeToggle = (value: boolean) => {
     setThemeMode(value ? 'dark' : 'light');
+  };
+
+  const { logout, currentUser } = useUserStore();
+  const handleLogout = () => {
+    logout();
+    // Navigation will be handled by navigation guards in _layout.tsx
+    // but adding a backup navigation here
+    router.replace("/(auth)/login");
   };
 
   const MenuItem = ({ 
@@ -90,13 +99,17 @@ export default function Profile() {
         <View style={styles.userInfoContainer}>
           <View style={styles.avatarContainer} className='border-2 border-[#4285F4] rounded-full'>
             <Image 
-              source={{ uri: 'https://ui-avatars.com/api/?name=John+Okoro&background=0D8ABC&color=fff' }} 
+              source={
+                currentUser?.userImage
+                  ? { uri: currentUser.userImage }
+                  : require("@/assets/images/userAvatar.png")
+              }
               style={styles.avatar} 
             />
           </View>
           <View style={styles.userDetails}>
-            <Text style={[styles.userName, { color: colors.text }]}>John Okoro</Text>
-            <Text style={[styles.userEmail, { color: colors.gray300 }]}>johnokoro@gmail.com</Text>
+            <Text style={[styles.userName, { color: colors.text }]}>{currentUser?.fullname}</Text>
+            <Text style={[styles.userEmail, { color: colors.gray300 }]} className='mt-1'>{currentUser?.email}</Text>
           </View>
           <TouchableOpacity style={styles.editButton} onPress={handleEditProfile}>
             <Svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -234,6 +247,15 @@ export default function Profile() {
             label="Delete Account" 
             isDestructive
             onPress={() => setDeleteModalVisible(true)}
+          />
+
+          <MenuItem 
+            icon={
+              <Ionicons name="log-out-outline" size={20} color="white" />
+            }
+            color="#6B7280" 
+            label="Logout" 
+            onPress={handleLogout}
           />
 
         </View>

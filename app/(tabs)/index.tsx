@@ -13,6 +13,7 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import UserHeader from "@/components/userHeader";
 import { useThemedColors } from "@/hooks/use-themed-colors";
+import { useUserStore } from "@/store/userStore";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
@@ -21,6 +22,10 @@ export default function HomeScreen() {
   const colors = useThemedColors();
   const router = useRouter();
   const [isPremiumUser] = React.useState(false); // Set to true for premium users
+
+  const { currentUser } = useUserStore();
+
+  console.log(currentUser?.fullname, 'ehy hoo')
 
   return (
     <ThemedView style={{ flex: 1 }} className="px-4">
@@ -34,7 +39,7 @@ export default function HomeScreen() {
         contentInsetAdjustmentBehavior="never"
       >
         <View className="mb-6">
-          {!isPremiumUser ? (
+          {!currentUser?.is_premium ? (
             <ImageBackground
               source={require("../../assets/images/premiumBg.png")}
               style={{
@@ -272,7 +277,7 @@ export default function HomeScreen() {
                       className="mt-2"
                       style={{ color: colors.white }}
                     >
-                      180 pts
+                      {currentUser?.total_points} pts
                     </ThemedText>
                   </View>
                   <Pressable onPress={() => router.push("/reward-points")}>

@@ -3,10 +3,11 @@ import {
   DefaultTheme,
   ThemeProvider,
 } from "@react-navigation/native";
-import { Stack } from "expo-router";
+import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -18,6 +19,7 @@ import { UserProvider } from "@/context/UserContext";
 import "@/global.css";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useUserStore } from "@/store/userStore";
+import { Toaster } from "sonner-native";
 
 
 
@@ -29,7 +31,9 @@ function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const { hasCompletedOnboarding, hasCompletedLanguageSelection, isHydrated: isOnboardingHydrated } =
     useOnboarding();
-  const { _hasHydrated: isUserHydrated } = useUserStore();
+  const { _hasHydrated: isUserHydrated, isAuthenticated } = useUserStore();
+  const segments = useSegments();
+  const router = useRouter();
 
   const [splashComplete, setSplashComplete] = useState(false);
   const [appReady, setAppReady] = useState(false);
@@ -58,6 +62,21 @@ function RootLayoutNav() {
       });
     }
   }, [appReady]);
+
+  // Auth Protection Logic
+  useEffect(() => {
+    if (!isOnboardingHydrated || !isUserHydrated || !splashComplete) return;
+
+    const inAuthGroup = segments[0] === "(auth)";
+    
+    if (!isAuthenticated && !inAuthGroup && hasCompletedOnboarding && hasCompletedLanguageSelection) {
+      // Redirect to login if not authenticated and not in auth group
+      router.replace("/(auth)/login");
+    } else if (isAuthenticated && inAuthGroup) {
+      // Redirect to tabs if authenticated and trying to access auth group
+      router.replace("/(tabs)");
+    }
+  }, [isAuthenticated, segments, isOnboardingHydrated, isUserHydrated, splashComplete]);
 
   // Show custom splash screen first, then navigate based on onboarding status
   if (!splashComplete) {
@@ -96,6 +115,7 @@ function RootLayoutNav() {
         </Stack>
       )}
       <StatusBar style="auto" />
+      <Toaster />
     </ThemeProvider>
   );
 }
@@ -112,14 +132,16 @@ function RootLayoutWrapper() {
 
 export default function RootLayout() {
   return (
-    <SafeAreaProvider>
-      <CustomThemeProvider>
-        <UserProvider>
-          <OnboardingProvider>
-            <RootLayoutWrapper />
-          </OnboardingProvider>
-        </UserProvider>
-      </CustomThemeProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <CustomThemeProvider>
+          <UserProvider>
+            <OnboardingProvider>
+              <RootLayoutWrapper />
+            </OnboardingProvider>
+          </UserProvider>
+        </CustomThemeProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

@@ -1,0 +1,83 @@
+import { useUiStore } from '@/store/uiStore';
+import { useUserStore } from '@/store/userStore';
+import axios from 'axios';
+import { toast } from 'sonner-native';
+
+// Get API URL from environment variables
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001/api';
+
+const apiClient = axios.create({
+  baseURL: BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+    // 'Accept': 'application/json',
+  },
+  timeout: 10000, // 10 seconds
+});
+
+// Request Interceptor: Add auth tokens or secret keys here
+apiClient.interceptors.request.use(
+  (config) => {
+    // Example: Add a secret key from env to every request
+    const secretKey = process.env.EXPO_PUBLIC_API_SECRET_KEY;
+    if (secretKey) {
+      config.headers['X-Api-Key'] = secretKey;
+    }
+    
+    // Add Auth Token from userStore if available
+    const { authToken } = useUserStore.getState();
+    if (authToken) {
+      config.headers.Authorization = `Bearer ${authToken}`;
+    }
+    
+    // Start global loading
+    useUiStore.getState().setIsLoading(true);
+
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Response Interceptor: Handle global errors
+apiClient.interceptors.response.use(
+  (response) => {
+    // Stop global loading on success
+    useUiStore.getState().setIsLoading(false);
+    
+    // Log successful response for debugging
+    console.log(`API Response [${response.config.method?.toUpperCase()}] ${response.config.url}:`, response.data);
+    
+    return response;
+  },
+  (error) => {
+    // Stop global loading on error
+    useUiStore.getState().setIsLoading(false);
+
+    if (error.response) {
+      // The request was made and the server responded with a status code
+      // that falls out of the range of 2xx
+      const errorMessage = error.response.data?.message || error.response.data?.error || 'An error occurred';
+      
+      // ONLY show toast for specific auth errors as requested
+      const authErrorMessages = ['invalid email or password', 'invalid credentials', 'user not found'];
+      if (authErrorMessages.some(msg => errorMessage.toLowerCase().includes(msg))) {
+        toast.error(errorMessage);
+      }
+      
+      console.error('API Error Response:', error.response.status, error.response.data);
+    } else if (error.request) {
+      // The request was made but no response was received
+      // toast.error('No response from server. Please check your connection.');
+      console.error('API No Response:', error.request);
+    } else {
+      // Something happened in setting up the request that triggered an Error
+      // toast.error(error.message);
+      console.error('API setup error:', error.message);
+    }
+    return Promise.reject(error);
+  }
+);
+
+export default apiClient;
