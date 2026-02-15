@@ -3,15 +3,18 @@ import {
   DefaultTheme,
   ThemeProvider,
 } from "@react-navigation/native";
+import { StripeProvider } from "@stripe/stripe-react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
+import { Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { SplashScreenWrapper } from "@/components/splash-screens/SplashScreenWrapper";
+import { GlobalLoader } from "@/components/ui/GlobalLoader";
 import { GluestackUIProvider } from "@/components/ui/gluestack-ui-provider";
 import { OnboardingProvider, useOnboarding } from "@/context/OnboardingContext";
 import { ThemeProvider as CustomThemeProvider } from "@/context/ThemeContext";
@@ -78,22 +81,17 @@ function RootLayoutNav() {
     }
   }, [isAuthenticated, segments, isOnboardingHydrated, isUserHydrated, splashComplete]);
 
-  // Show custom splash screen first, then navigate based on onboarding status
-  if (!splashComplete) {
-    return (
-      <SplashScreenWrapper
-        isReady={appReady && isOnboardingHydrated && isUserHydrated}
-        onSplashHide={() => setSplashComplete(true)}
-        splashDuration={2500}
-      />
-    );
-  }
-
   // Navigation is now safe to render as state is ready and splash is finished
 
-  return (
+  const content = (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      {!hasCompletedOnboarding ? (
+      {!splashComplete ? (
+        <SplashScreenWrapper
+          isReady={appReady && isOnboardingHydrated && isUserHydrated}
+          onSplashHide={() => setSplashComplete(true)}
+          splashDuration={2500}
+        />
+      ) : !hasCompletedOnboarding ? (
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(onboarding)" />
         </Stack>
@@ -114,21 +112,53 @@ function RootLayoutNav() {
           />
         </Stack>
       )}
-      <StatusBar style="auto" />
+      <StatusBar hidden={true} />
       <Toaster />
+      <GlobalLoader />
     </ThemeProvider>
   );
+
+  if (Platform.OS === 'android') {
+    return (
+      <StripeProvider
+        publishableKey={process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || ""}
+      >
+        {content}
+      </StripeProvider>
+    );
+  }
+
+  return content;
 }
 
 function RootLayoutWrapper() {
   const colorScheme = useColorScheme();
   
+  useEffect(() => {
+    // Initialize IAP connection (Commented out to fix E_IAP_NOT_AVAILABLE)
+    /*
+    const initializeIAP = async () => {
+      try {
+        await setup();
+        if (Platform.OS === 'android') {
+          await flushFailedPurchasesCachedAsPendingAndroid();
+        }
+      } catch (err) {
+        console.warn("IAP initialization failed", err);
+      }
+    };
+    initializeIAP();
+    */
+  }, []);
+
   return (
     <GluestackUIProvider mode={colorScheme}>
       <RootLayoutNav />
     </GluestackUIProvider>
   );
 }
+
+// const WrappedRootLayout = withIAPContext(RootLayoutWrapper);
 
 export default function RootLayout() {
   return (

@@ -1,6 +1,7 @@
 import { useThemedColors } from "@/hooks/use-themed-colors";
+import { Image } from "expo-image";
 import React from "react";
-import { Image, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { ThemedText } from "./themed-text";
 
 interface CardComponentProps {
@@ -9,16 +10,19 @@ interface CardComponentProps {
   lessons?: number;
   progress?: number;
   onContinue?: () => void;
+  isPremium?: boolean;
 }
 
 const CardComponent: React.FC<CardComponentProps> = ({
-  title = "Financial literacy and budgeting",
-  image = require("@/assets/images/woman.png"),
-  lessons = 12,
-  progress = 65,
-  onContinue = () => {},
+  title,
+  image,
+  lessons,
+  progress = 0,
+  onContinue,
+  isPremium = false,
 }) => {
   const colors = useThemedColors();
+
 
   return (
     <View
@@ -27,12 +31,32 @@ const CardComponent: React.FC<CardComponentProps> = ({
         padding: 12,
         borderRadius: 12,
         width: 280,
-        height: "auto",
+        height: 260,
       }}
     >
       {/* Course Image */}
-      <View className="w-full h-[140px] overflow-hidden rounded-2xl mb-3">
-        <Image source={image} className="w-full h-full" resizeMode="cover" />
+      <View className="w-full h-[120px] overflow-hidden rounded-2xl mb-3 relative">
+        <Image
+          source={image || require("../assets/images/woman.png")}
+          style={{ width: "100%", height: "100%" }}
+          contentFit="cover"
+          transition={500}
+        />
+        {isPremium && (
+          <View 
+            style={{ 
+              position: 'absolute', 
+              top: 8, 
+              right: 8, 
+              backgroundColor: '#527c65', 
+              paddingHorizontal: 8, 
+              paddingVertical: 4, 
+              borderRadius: 4 
+            }}
+          >
+            <ThemedText style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>PREMIUM</ThemedText>
+          </View>
+        )}
       </View>
 
       <View style={{ flex: 1, justifyContent: "space-between" }}>
@@ -47,7 +71,7 @@ const CardComponent: React.FC<CardComponentProps> = ({
           </ThemedText>
 
           {/* Progress Bar */}
-          <View className="mb-3">
+          <View className="mb-1">
             <View
               style={{
                 height: 6,
@@ -91,7 +115,7 @@ const CardComponent: React.FC<CardComponentProps> = ({
               style={{ color: colors.green }}
               className="font-semibold"
             >
-              {lessons} lessons
+              {lessons} {lessons === 1 ? "lesson" : "lessons"}
             </ThemedText>
           </View>
         </View>

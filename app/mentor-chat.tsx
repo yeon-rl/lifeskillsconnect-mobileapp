@@ -13,81 +13,71 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Defs, LinearGradient, Path, Stop } from "react-native-svg";
 
-import HistorySidebar, { ChatConversation } from "@/components/HistorySidebar";
+import HistorySidebar from "@/components/HistorySidebar";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useThemedColors } from "@/hooks/use-themed-colors";
+import { useChatStore } from "@/store/chatStore";
+import { useUserStore } from "@/store/userStore";
 
 const { width } = Dimensions.get("window");
-
-interface Message {
-  id: string;
-  text: string;
-  sender: "user" | "mentor";
-  timestamp: Date;
-}
-
-const SUGGESTED_QUESTIONS = [
-  "How do I budget £100 for the week?",
-  "What career paths fit someone who enjoys art and technology?",
-  "What should I do if I feel unsafe at home?",
-];
 
 export default function MentorChatScreen() {
   const colors = useThemedColors();
   const router = useRouter();
-  const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [isSidebarVisible, setIsSidebarVisible] = useState(false);
-  const [conversations, setConversations] = useState<ChatConversation[]>([
-    {
-      id: "1",
-      title: "Budgeting Basics",
-      messages: [],
-      date: new Date(),
-    },
-    {
-      id: "2",
-      title: "Career Paths in Tech",
-      messages: [],
-      date: new Date(Date.now() - 86400000), // Yesterday
-    },
-  ]);
+  
+  const { 
+    messages: chatMessages, 
+    startNewChat,
+    loadConversation,
+    fetchConversations,
+    currentConversationId,
+    conversations,
+    sendMessage,
+    isTyping
+  } = useChatStore();
+  
+  const { authToken } = useUserStore();
   const scrollViewRef = useRef<ScrollView>(null);
 
-  const sendMessage = (text: string) => {
-    if (!text.trim()) return;
+  // Fetch conversations on mount
+  React.useEffect(() => {
+    if (authToken) {
+      fetchConversations(authToken);
+    }
+  }, [authToken, fetchConversations]);
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      text,
-      sender: "user",
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
+  const handleSendMessage = async (text: string) => {
+    if (!text.trim() || !authToken) return;
     setInputText("");
-
-    // Simulate mentor response
-    setTimeout(() => {
-      const mentorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: "“🎨💻 Try UI/UX or animation!”",
-        sender: "mentor",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, mentorMessage]);
-    }, 1000);
+    await sendMessage(text, authToken);
   };
 
   const handleSuggestedPress = (question: string) => {
-    sendMessage(question);
+    handleSendMessage(question);
   };
 
-  const startNewChat = () => {
-    setMessages([]);
+  const handleNewChat = () => {
+    startNewChat();
     setIsSidebarVisible(false);
   };
+
+  const handleSelectConversation = (conversationId: string) => {
+    if (authToken) {
+      loadConversation(conversationId, authToken);
+      setIsSidebarVisible(false);
+    }
+  };
+
+  // Map store conversations to HistorySidebar format
+  const mappedConversations = conversations.map(conv => ({
+    id: conv.id,
+    title: conv.title,
+    messages: conv.messages || [],
+    date: new Date(conv.createdAt)
+  }));
 
   return (
     <ThemedView style={{ flex: 1 }} className="bg-white">
@@ -119,12 +109,9 @@ export default function MentorChatScreen() {
         <HistorySidebar
           isVisible={isSidebarVisible}
           onClose={() => setIsSidebarVisible(false)}
-          onSelectItem={(id) => {
-            console.log("Selected history item:", id);
-            // In a real app, you would load the chat history for this ID
-          }}
-          onNewChat={startNewChat}
-          conversations={conversations}
+          onSelectItem={handleSelectConversation}
+          onNewChat={handleNewChat}
+          conversations={mappedConversations}
         />
 
         {/* Chat Content */}
@@ -134,7 +121,7 @@ export default function MentorChatScreen() {
           contentContainerStyle={{ paddingBottom: 20 }}
           onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
         >
-          {messages.length === 0 ? (
+          {chatMessages.length === 0 ? (
             <View className="items-center justify-center mt-40">
               <View className="mb-10 items-center">
                  <Svg width="120" height="120" viewBox="0 0 60 60" fill="none">
@@ -155,7 +142,11 @@ export default function MentorChatScreen() {
               </View>
 
               <View className="gap-3 w-full">
-                {SUGGESTED_QUESTIONS.map((q, index) => (
+                {[
+                  "How do I budget £100 for the week?",
+                  "What career paths fit someone who enjoys art and technology?",
+                  "What should I do if I feel unsafe at home?",
+                ].map((q, index) => (
                   <TouchableOpacity
                     key={index}
                     onPress={() => handleSuggestedPress(q)}
@@ -169,12 +160,12 @@ export default function MentorChatScreen() {
             </View>
           ) : (
             <View className="mt-4 gap-4">
-              {messages.map((msg) => (
+              {chatMessages.map((msg) => (
                 <View
                   key={msg.id}
-                  className={`flex-row ${msg.sender === "user" ? "justify-end" : "justify-start"} items-end gap-2`}
+                  className={`flex-row ${msg.role === "user" ? "justify-end" : "justify-start"} items-end gap-2`}
                 >
-                  {msg.sender === "mentor" && (
+                  {msg.role !== "user" && (
                      <View className="mb-1">
                         <Svg width="36" height="36" viewBox="0 0 60 60" fill="none">
                             <Defs>
@@ -195,20 +186,33 @@ export default function MentorChatScreen() {
                   )}
                   <View
                     className={`p-4 rounded-2xl max-w-[80%] ${
-                      msg.sender === "user"
+                      msg.role === "user"
                         ? "bg-[#F2F6F3] dark:bg-[#5A7C6533] rounded-tr-none"
                         : "bg-[#4285F4] rounded-tl-none"
                     }`}
                   >
                     <ThemedText
-                      className={`${msg.sender === "user" ? "text-gray-800" : ""}`}
-                      style={msg.sender === "mentor" ? { color: "white" } : undefined}
+                      className={`${msg.role === "user" ? "text-gray-800" : ""}`}
+                      style={msg.role !== "user" ? { color: "white" } : undefined}
                     >
-                      {msg.text}
+                      {msg.content}
                     </ThemedText>
                   </View>
                 </View>
               ))}
+              
+              {isTyping && (
+                <View className="flex-row justify-start items-center gap-2">
+                   <View className="mb-1">
+                      <Svg width="36" height="36" viewBox="0 0 60 60" fill="none">
+                          <Circle cx="30" cy="30" r="30" fill="#5A7C65"/>
+                      </Svg>
+                   </View>
+                   <View className="p-4 bg-[#4285F4] rounded-2xl rounded-tl-none">
+                      <ThemedText style={{color: "white"}}>Mentor is typing...</ThemedText>
+                   </View>
+                </View>
+              )}
             </View>
           )}
         </ScrollView>
@@ -235,8 +239,9 @@ export default function MentorChatScreen() {
               </TouchableOpacity>
             </View>
             <TouchableOpacity
-              onPress={() => sendMessage(inputText)}
+              onPress={() => handleSendMessage(inputText)}
               className="bg-[#5A7C65] w-14 h-14 rounded-full items-center justify-center"
+              disabled={isTyping}
             >
               <Svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                 <Path d="M3.47803 2.40478C3.34807 2.36702 3.21031 2.36513 3.07936 2.39932C2.94841 2.4335 2.82915 2.50248 2.73423 2.59895C2.6393 2.69541 2.57224 2.81576 2.54017 2.94724C2.50809 3.07873 2.51219 3.21644 2.55203 3.34578L4.98403 11.2508H13.5C13.6989 11.2508 13.8897 11.3298 14.0304 11.4704C14.171 11.6111 14.25 11.8019 14.25 12.0008C14.25 12.1997 14.171 12.3905 14.0304 12.5311C13.8897 12.6718 13.6989 12.7508 13.5 12.7508H4.98403L2.55203 20.6558C2.51243 20.7851 2.50851 20.9226 2.54069 21.054C2.57287 21.1853 2.63995 21.3055 2.73484 21.4018C2.82973 21.4981 2.94889 21.567 3.07972 21.6011C3.21055 21.6353 3.34817 21.6334 3.47803 21.5958C10.093 19.6721 16.331 16.6331 21.923 12.6098C22.0197 12.5403 22.0984 12.4489 22.1527 12.343C22.207 12.2371 22.2353 12.1198 22.2353 12.0008C22.2353 11.8818 22.207 11.7645 22.1527 11.6586C22.0984 11.5527 22.0197 11.4612 21.923 11.3918C16.331 7.36807 10.0931 4.32873 3.47803 2.40478Z" fill="white"/>

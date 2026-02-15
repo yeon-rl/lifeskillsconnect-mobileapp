@@ -6,29 +6,31 @@ interface LoginData {
 }
 
 /**
- * Example service for authentication related API calls
+ * Service for authentication related API calls
  */
 export const authService = {
   /**
-   * Login request example
-   * @param data 
+   * Login request
    */
   login: async (data: LoginData) => {
     try {
       const response = await apiClient.post('/auth/login', data);
       return response.data;
     } catch (error) {
-      // Errors are already logged in apiClient interceptors
       throw error;
     }
   },
 
   /**
-   * Get user profile example
+   * Signup request
    */
-  getProfile: async () => {
+  signup: async (data: {
+    email: string;
+    password: string;
+    preferredLanguage?: string | null;
+  }) => {
     try {
-      const response = await apiClient.get('/auth/profile');
+      const response = await apiClient.post("/auth/signup", data);
       return response.data;
     } catch (error) {
       throw error;
@@ -36,18 +38,113 @@ export const authService = {
   },
 
   /**
-   * Update profile example
+   * Verify OTP request
    */
-//   updateProfile: async (userData) => {
-//     try {
-//       const response = await apiClient.patch('/auth/profile', userData);
-//       return response.data;
-//     } catch (error) {
-//       throw error;
-//     }
-//   }
-};
+  verifyOTP: async (data: { email: string; otp: string }) => {
+    try {
+      const response = await apiClient.post("/auth/verify-otp", data);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
 
+  /**
+   * Resend OTP request
+   */
+  resendOTP: async (data: { email: string }) => {
+    try {
+      const response = await apiClient.post("/auth/resend-otp", data);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Complete user profile
+   */
+  completeProfile: async (data: {
+    userId: number;
+    fullname: string;
+    username: string;
+    phone: string;
+    nationality: string;
+    date_of_birth: string;
+    heardAboutUs: string;
+  }) => {
+    try {
+      const response = await apiClient.post("/auth/complete-profile", data);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Google authentication
+   */
+  googleAuth: async (data: { token: string }) => {
+    try {
+      const response = await apiClient.post("/auth/google", data);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Apple authentication
+   */
+  appleAuth: async (data: { token: string; user?: any }) => {
+    try {
+      const response = await apiClient.post("/auth/apple", data);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Get available languages
+   */
+  getLanguages: async () => {
+    try {
+      const response = await apiClient.get("/languages");
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Update user interests
+   */
+  updateInterests: async (data: { userId: number; interests: string[] }) => {
+    try {
+      const response = await apiClient.post("/auth/update-interests", data);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Get user profile
+   */
+  getProfile: async (token?: string) => {
+    try {
+      const config: any = {};
+      if (token) {
+        config.headers = { Authorization: `Bearer ${token}` };
+      }
+      const response = await apiClient.get('/auth/profile', config);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+};
 /**
  * Service for course related API calls
  */
@@ -93,6 +190,455 @@ export const courseService = {
       });
       return response.data;
     } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Get a single course by ID
+   * @param courseId 
+   * @param token Optional token for authorization (if not using global auth)
+   */
+  getCourseById: async (courseId: string, token?: string) => {
+    try {
+      const config: any = {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      };
+
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+
+      const response = await apiClient.get(`/courses/${courseId}`, config);
+
+      console.log('Full Response:', JSON.stringify(response.data, null, 2), "where is assessments");
+
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching course ${courseId}:`, error);
+      throw error;
+    }
+  },
+
+  /**
+   * Update progress for a specific resource
+   * @param data 
+   */
+  updateResourceProgress: async (data: {
+    resourceId: number;
+    userId: string;
+    watchedDuration: number;
+    totalDuration: number;
+    isCompleted: boolean;
+  }) => {
+    try {
+      const payload = {
+        resourceId: data.resourceId,
+        watchedDuration: data.watchedDuration,
+        totalDuration: data.totalDuration,
+        isCompleted: data.isCompleted
+      };
+      
+      console.log('[API] POST /progress/track-resource payload:', JSON.stringify(payload, null, 2));
+
+      const response = await apiClient.post('/progress/track-resource', payload);
+      
+      console.log('[API] POST /progress/track-resource response:', JSON.stringify(response.data, null, 2));
+      return response.data;
+    } catch (error: any) {
+      console.error("[API] POST /progress/track-resource error:", error?.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  /**
+   * Get quiz for a specific resource
+   * @param resourceId 
+   */
+  getResourceQuiz: async (resourceId: number) => {
+    try {
+      console.log('[API] getResourceQuiz called for:', resourceId);
+      const response = await apiClient.get(`/resource-quizzes/${resourceId}`);
+      console.log('[API] Quiz data received:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching quiz for resource ${resourceId}:`, error);
+      throw error;
+    }
+  },
+
+  /**
+   * Submit answers for a resource quiz
+   * @param resourceId 
+   * @param answers 
+   */
+  submitResourceQuiz: async (
+    resourceId: number,
+    answers: { [questionId: number]: number }
+  ) => {
+    try {
+      const response = await apiClient.post(
+        `/resource-quizzes/${resourceId}/submit`,
+        { answers }
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error submitting resource quiz:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Skip a resource quiz
+   * @param resourceId 
+   */
+  skipResourceQuiz: async (resourceId: number) => {
+    try {
+      const response = await apiClient.post(
+        `/resource-quizzes/${resourceId}/skip`,
+        {}
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error skipping resource quiz:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Submit answers for a course assessment
+   * @param assessmentId 
+   * @param answers 
+   * @param token 
+   */
+  submitAssessment: async (
+    assessmentId: number,
+    answers: { [questionId: string]: number },
+    token: string
+  ) => {
+    try {
+      const config: any = {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      };
+
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+        console.log("Authorization header set with token");
+      }
+
+      const response = await apiClient.post(
+        `/assessments/submit/${assessmentId}`,
+        { answers },
+        config
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error submitting assessment:", error);
+      throw error;
+    }
+  },
+};
+
+/**
+ * Service for notification related API calls
+ */
+export const notificationService = {
+  /**
+   * Get all notifications for the current user
+   */
+  getUserNotifications: async () => {
+    try {
+      const response = await apiClient.get(`/notifications`);
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching user notifications:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Mark a notification as read
+   * @param notificationId 
+   */
+  markNotificationAsRead: async (notificationId: number | string) => {
+    try {
+      const response = await apiClient.post(`/notifications/${notificationId}/read`, {});
+      return response.data;
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Mark all notifications as read
+   */
+  markAllNotificationsAsRead: async () => {
+    try {
+      const response = await apiClient.post(`/notifications/mark-all-read`, {});
+      return response.data;
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
+      throw error;
+    }
+  },
+};
+
+/**
+ * Service for reporting abuse
+ */
+export const reportService = {
+  /**
+   * Submit an abuse report
+   * @param data 
+   * @param token Optional token for authorization
+   */
+  reportAbuse: async (data: {
+    reported_entity: string;
+    report_type: string;
+    report_subject: string;
+    description: string;
+    evidence?: any;
+    contact_preference?: 'Always' | 'Only if necessary' | 'None';
+    additional_details?: string;
+    keep_me_updated?: boolean;
+  }, token?: string) => {
+    try {
+      const config: any = {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      };
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      const response = await apiClient.post("/reports", data, config);
+      return response.data;
+    } catch (error) {
+      console.error("Error reporting abuse:", error);
+      throw error;
+    }
+  },
+};
+
+/**
+ * Service for user points and reward level
+ */
+export const pointsService = {
+  /**
+   * Get user points and reward level
+   * @param token 
+   */
+  getUserPoints: async (token: string) => {
+    try {
+      const config: any = {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      };
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      const response = await apiClient.get(`/points/user-points`, config);
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching user points:", error);
+      throw error;
+    }
+  },
+};
+/**
+ * Service for user related API calls
+ */
+export const userService = {
+  /**
+   * Change password request
+   */
+  changePassword: async (data: { newPassword: string }, token: string) => {
+    try {
+      const config = {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      };
+      const response = await apiClient.post("/users/change-password", data, config);
+      return response.data;
+    } catch (error: any) {
+      console.error("Error changing password:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Request password OTP
+   */
+  requestPasswordOTP: async (data: { email?: string; phone?: string }, token?: string) => {
+    try {
+      const config: any = {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      };
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      const response = await apiClient.post("/users/request-password-otp", data, config);
+      return response.data;
+    } catch (error) {
+      console.error("Error requesting password OTP:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Verify password OTP
+   */
+  verifyPasswordOTP: async (data: { email?: string; phone?: string; otp: string }, token?: string) => {
+    try {
+      const config: any = {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      };
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      const response = await apiClient.post("/users/verify-password-otp", data, config);
+      return response.data;
+    } catch (error) {
+      console.error("Error verifying password OTP:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Update user profile
+   */
+  updateUserProfile: async (
+    data: {
+      userId: string;
+      fullname?: string;
+      username?: string;
+      phoneNumber?: string;
+      userImage?: string;
+      nationality?: string;
+      preferred_language?: string;
+      notifications_enabled?: boolean;
+    },
+    token: string
+  ) => {
+    try {
+      const config = {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      };
+
+      const response = await apiClient.put("/users/update-profile", data, config);
+      return response.data;
+    } catch (error: any) {
+      console.error("Error updating profile:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Request account deletion
+   */
+  requestAccountDeletion: async (token: string) => {
+    try {
+      const config = {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      };
+      const response = await apiClient.post("/users/request-deletion", {}, config);
+      return response.data;
+    } catch (error: any) {
+      console.error("Error requesting account deletion:", error);
+      throw error;
+    }
+  },
+};
+
+/**
+ * Service for subscription related API calls
+ */
+export const subscriptionService = {
+  /**
+   * Create a checkout session
+   */
+  createCheckoutSession: async (plan: string, token?: string) => {
+    try {
+      const config: any = {};
+      if (token) {
+        config.headers = { Authorization: `Bearer ${token}` };
+      }
+      const response = await apiClient.post("/subscriptions/create-checkout-session", { plan }, config);
+      return response.data;
+    } catch (error) {
+      console.error("Error creating checkout session:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Verify a subscription session
+   */
+  verifySubscriptionSession: async (sessionId: string, token?: string) => {
+    try {
+      const config: any = {};
+      if (token) {
+        config.headers = { Authorization: `Bearer ${token}` };
+      }
+      const response = await apiClient.get(`/subscriptions/verify-session/${sessionId}`, config);
+      return response.data;
+    } catch (error) {
+      console.error("Error verifying subscription session:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Verify Apple IAP Receipt
+   * TODO: Connect to backend endpoint provided by user
+   */
+  verifyIAPReceipt: async (receipt: string, token?: string) => {
+    try {
+      const config: any = {};
+      if (token) {
+        config.headers = { Authorization: `Bearer ${token}` };
+      }
+      // Placeholder endpoint
+      const response = await apiClient.post("/subscriptions/verify-iap", { receipt }, config);
+      return response.data;
+    } catch (error) {
+      console.error("Error verifying IAP receipt:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Fetch Stripe PaymentIntent parameters for Android
+   * TODO: Connect to backend endpoint provided by user
+   */
+  getStripePaymentIntent: async (plan: string, token?: string) => {
+    try {
+      const config: any = {};
+      if (token) {
+        config.headers = { Authorization: `Bearer ${token}` };
+      }
+      // Placeholder endpoint
+      const response = await apiClient.post("/subscriptions/stripe-intent", { plan }, config);
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching Stripe intent:", error);
       throw error;
     }
   },

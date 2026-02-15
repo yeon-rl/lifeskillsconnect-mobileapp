@@ -130,3 +130,44 @@ export const markAllNotificationsAsRead = async () => {
   const response = await api.put('/notifications/read-all');
   return response.data;
 };
+
+/**
+ * Get all crisis help services
+ */
+export const getCrisesHelp = async () => {
+  try {
+    const response = await api.get('/crisis-help');
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Start an anonymous chat session
+ */
+export const startAnonymousChat = async (initialMessage?: string) => {
+  const body = initialMessage ? { message: initialMessage } : {};
+  const response = await api.post('/support/start', body);
+  return response.data;
+};
+
+/**
+ * Send a message in an anonymous chat
+ */
+export const sendSupportMessage = async (chatId: string, message: string) => {
+  const response = await api.post('/support/message', {
+    chatId,
+    message,
+    senderType: 'user',
+  });
+  return response.data;
+};
+
+/**
+ * Fetch chat history for a session
+ */
+export const getChatHistory = async (chatId: string) => {
+  const response = await api.get(`/support/history/${chatId}`);
+  return response.data;
+};

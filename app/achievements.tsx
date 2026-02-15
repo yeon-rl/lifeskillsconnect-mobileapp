@@ -1,7 +1,9 @@
 import { useThemedColors } from '@/hooks/use-themed-colors';
+import { pointsService } from '@/services/api/apiServices';
+import { useUserStore } from '@/store';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Dimensions,
   Image,
@@ -23,6 +25,31 @@ export default function Achievements() {
 
   const [rankModalVisible, setRankModalVisible] = useState(false);
   const [pointsModalVisible, setPointsModalVisible] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [userPointsData, setUserPointsData] = useState<any>(null);
+
+  const { currentUser, authToken } = useUserStore();
+
+
+  useEffect(() => {
+    const fetchUserPoints = async () => {
+      if (!authToken) return;
+      
+      setLoading(true);
+      try {
+        const data = await pointsService.getUserPoints(authToken);
+        setUserPointsData(data.userPoints);
+      } catch (error) {
+        console.error("Error fetching achievements data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserPoints();
+  }, [authToken]);
+
+  // console.log(JSON.stringify(currentUser, null, 2), "check current user")
 
   const AchievementItem = ({ 
     label, 
@@ -102,9 +129,9 @@ export default function Achievements() {
                     />
                 </View>
                 
-                <Text style={[styles.modalTitle, { color: themedColors.text }]}>Silver level</Text>
+                <Text style={[styles.modalTitle, { color: themedColors.text }]}>{userPointsData?.level || currentUser?.reward_level || 'N/A'} level</Text>
                 <Text style={[styles.modalText, { color: themedColors.gray700 }]}>
-                    You are currently on silver level.
+                    You are currently on {userPointsData?.level || currentUser?.reward_level || 'N/A'} level.
                 </Text>
 
                 <TouchableOpacity 
@@ -138,9 +165,9 @@ export default function Achievements() {
                     />
                 </View>
 
-                <Text style={[styles.modalTitle, { color: themedColors.text }]}>Current Points: 2004 LScPoints</Text>
+                <Text style={[styles.modalTitle, { color: themedColors.text }]}>Current Points: {userPointsData?.current_points || 0} LScPoints</Text>
                 <Text style={[styles.modalText, { color: themedColors.gray700 }]}>
-                    You've accumulated a total of 4000 LScPoints
+                    You've accumulated a total of {userPointsData?.total_points || 0} LScPoints
                 </Text>
 
                 <View style={styles.modalButtonsRow}>

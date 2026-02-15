@@ -3,15 +3,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Switch,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 const CategoryCard = ({ name, dotColor }: { name: string; dotColor: string }) => {
@@ -79,23 +79,7 @@ export default function SafeSpace() {
           ))}
         </View>
 
-        {/* Safe Space Near Me Banner */}
-        <TouchableOpacity 
-          style={styles.nearMeBanner}
-          onPress={() => router.push('/safe-space-map')}
-        >
-          <View style={styles.nearMeIconContainer}>
-            <Ionicons name="map-outline" size={24} color="#4285F4" />
-          </View>
-          <View style={styles.nearMeTextContainer}>
-            <Text style={styles.nearMeTitle}>Safe space near me</Text>
-            <View style={styles.distanceContainer}>
-                <Ionicons name="locate-outline" size={14} color="#E0E0E0" />
-                <Text style={styles.nearMeDistance}> 1.5km</Text>
-            </View>
-          </View>
-          <Ionicons name="chevron-forward" size={24} color="white" />
-        </TouchableOpacity>
+
 
         {/* Dial Crisis Help Button */}
         <TouchableOpacity 
@@ -120,13 +104,7 @@ export default function SafeSpace() {
           />
         </View>
 
-        {/* Go To Map Button */}
-        <TouchableOpacity 
-          style={styles.goToMapButton}
-          onPress={() => router.push('/safe-space-map')}
-        >
-          <Text style={styles.goToMapButtonText}>Go To Map</Text>
-        </TouchableOpacity>
+
       </ScrollView>
 
       {/* Dial Modal */}

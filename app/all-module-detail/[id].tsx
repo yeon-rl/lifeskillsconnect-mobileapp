@@ -1,10 +1,15 @@
 import { ThemedText } from '@/components/themed-text';
 import { useThemedColors } from '@/hooks/use-themed-colors';
+import { useFetchCourseById } from '@/hooks/useCourses';
+import { useCoursesStore } from '@/store/courseStore';
+import { useUserStore } from '@/store/userStore';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  Image,
+  ActivityIndicator,
+  Modal,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -13,37 +18,114 @@ import {
   View
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { toast } from 'sonner-native';
 
-// Mock Data for the details page (can be moved to a separate file later)
-const MOCK_DETAILS = {
-  title: 'Financial literacy and budgeting',
-  rating: 4.6,
-  ratingCount: 1265,
-  studentCount: 3547,
-  description: 'Learn how to make smart money moves! This module teaches you the basics of budgeting, saving, spending wisely, and understanding things like credit, debt, and banking. You will gain the skills to manage your personal finances confidently.',
-  instructor: {
-    name: 'Andrew Dickson',
-    avatar: require('@/assets/images/woman.png'),
-  },
-  lessons: [
-    { id: '1', title: 'Course Outline', duration: '07:00 mins', section: 'Section 1 | Intro to Financial Literacy' },
-    { id: '2', title: 'Intro to finances', duration: '07:00 mins' },
-    { id: '3', title: 'Advanced budgeting', duration: '10:00 mins' },
-    { id: '4', title: 'Investing basics', duration: '15:00 mins' },
-    { id: '5', title: 'Retirement planning', duration: '12:00 mins', isTrophy: true },
-    { id: '6', title: 'Assessment', duration: '07:00 mins', section: 'Section 2 | Assessment' },
-  ],
-  reviews: [
-    { id: '1', name: 'Tracy Evans', time: '1 day Ago', rating: 4.6, text: 'Learn how to make smart money moves! This module teaches you the basics of budgeting, saving, spending wisely, and understanding things like credit.', avatar: require('@/assets/images/woman.png'), },
-    { id: '2', name: 'Tracy Evans', time: '1 day Ago', rating: 4.6, text: 'Learn how to make smart money moves! This module teaches you the basics of budgeting, saving, spending wisely, and understanding things like credit.', avatar: require('@/assets/images/woman.png'), },
-  ]
-};
 
 export default function AllModuleDetail() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const colors = useThemedColors();
   const [activeTab, setActiveTab] = useState<'Description' | 'Lessons' | 'Review'>('Description');
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const { currentUser, authToken } = useUserStore();
+  const { subscribeToCourse, getUserCourseById, userCourses } = useCoursesStore();
+
+  const { course: fetchedCourse, isLoading, error, refetch } = useFetchCourseById(typeof id === 'string' ? id : null, authToken || undefined);
+  
+  // Use userCourses in the dependency to ensure reactivity when the store updates
+  const isSubscribed = React.useMemo(() => {
+    return fetchedCourse?.id ? !!getUserCourseById(fetchedCourse.id.toString()) : false;
+  }, [fetchedCourse, userCourses, getUserCourseById]);
+
+  const handleSubscription = async () => {
+    if (!fetchedCourse || !currentUser || !authToken) {
+      console.log("Subscription aborted: Missing data", { fetchedCourse: !!fetchedCourse, currentUser: !!currentUser, authToken: !!authToken });
+      return;
+    }
+
+    if (fetchedCourse.is_paid === 1 && !currentUser?.is_premium) {
+      setShowPremiumModal(true);
+      return;
+    }
+
+    try {
+      console.log("Attempting subscription for course:", fetchedCourse.id, "User:", currentUser.id);
+      const result = await subscribeToCourse(fetchedCourse.id.toString(), currentUser.id.toString());
+      console.log("Subscription result:", result);
+      
+      if (result.success) {
+        // Show success toast
+        toast.success(result.message || "Successfully enrolled!");
+        // refetch() is good to have, but the store update already triggers reactivity for isSubscribed
+        refetch();
+      } else {
+        toast.error(result.message || "Failed to enroll");
+      }
+    } catch (err: any) {
+      console.error("Caught error in handleSubscription:", err);
+      toast.error("An error occurred during subscription");
+    }
+  };
+
+  const handleStartCourse = () => {
+    if (fetchedCourse) {
+      router.push(`/module-detail/${fetchedCourse.id}`);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (error || !fetchedCourse) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, padding: 20 }}>
+        <ThemedText style={{ textAlign: 'center', color: colors.textSecondary }}>
+          {error || "Course not found"}
+        </ThemedText>
+        <TouchableOpacity 
+          onPress={() => router.back()}
+          style={[styles.subscribeButton, { backgroundColor: colors.primary, width: 'auto', paddingHorizontal: 20, marginTop: 20 }]}
+        >
+          <Text style={{ color: 'white' }}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // Map fetched data to what the component expects
+  const courseData = {
+    title: fetchedCourse.title,
+    rating: fetchedCourse.averageRating || 0,
+    ratingCount: fetchedCourse.reviewCount || 0,
+    studentCount: (fetchedCourse as any).students || 0,
+    description: fetchedCourse.description,
+    instructor: {
+      name: fetchedCourse.instructor?.name || "Unknown Instructor",
+      avatar: fetchedCourse.instructor?.image 
+        ? { uri: fetchedCourse.instructor.image } 
+        : (fetchedCourse.thumbnail ? { uri: fetchedCourse.thumbnail } : require('@/assets/images/woman.png')),
+    },
+    lessons: (fetchedCourse.resources || []).map((res: any, index: number) => ({
+      id: res.id?.toString() || index.toString(),
+      title: res.title || "Untitled Lesson",
+      duration: res.duration ? `${Math.floor(res.duration / 60)}:00 mins` : "0:00 mins", 
+      section: index === 0 ? 'Section 1 | Course Components' : undefined
+    })),
+    reviews: (fetchedCourse.reviews || []).map((rev: any) => ({
+      id: rev.id?.toString() || Math.random().toString(),
+      name: rev.name || "Anonymous",
+      time: rev.review_date || "Recently",
+      rating: rev.rating || 0,
+      text: rev.comment || "",
+      avatar: rev.image ? { uri: rev.image } : require('@/assets/images/woman.png'),
+    }))
+  };
 
   const renderDescription = () => (
     <View style={styles.tabContent}>
@@ -51,28 +133,39 @@ export default function AllModuleDetail() {
       
       <View style={styles.metaRow}>
         <Ionicons name="play-circle-outline" size={20} color={colors.text} />
-        <ThemedText style={styles.metaText}>24hrs of Screen time</ThemedText>
+        <ThemedText style={styles.metaText}>{fetchedCourse.duration}hrs of Screen time</ThemedText>
       </View>
+        {
+          fetchedCourse.has_certificate ?
       <View style={styles.metaRow}>
-        <Ionicons name="ribbon-outline" size={20} color={colors.text} />
+          <Ionicons name="ribbon-outline" size={20} color={colors.text} />
         <ThemedText style={styles.metaText}>Certificate of Completion</ThemedText>
       </View>
+        : null
+        }
       <View style={styles.metaRow}>
         <Ionicons name="book-outline" size={20} color={colors.text} />
-        <ThemedText style={styles.metaText}>15 Downloadable Resourse</ThemedText>
+        <ThemedText style={styles.metaText}>{fetchedCourse.resources.length} Downloadable Resourse</ThemedText>
       </View>
       <View style={styles.metaRow}>
         <Ionicons name="star-outline" size={20} color={colors.text} />
-        <ThemedText style={styles.metaText}>15 Points</ThemedText>
+        <ThemedText style={styles.metaText}>{fetchedCourse.points} Points</ThemedText>
       </View>
 
-      <ThemedText style={styles.descriptionText}>
-        {MOCK_DETAILS.description}
+      <ThemedText style={styles.descriptionText} numberOfLines={isExpanded ? undefined : 2}>
+        {courseData.description}
       </ThemedText>
-      <ThemedText style={{ color: colors.primary, marginTop: 4 }}>See More</ThemedText>
+      <TouchableOpacity onPress={() => setIsExpanded(!isExpanded)}>
+        <ThemedText style={{ color: colors.primary, marginTop: 4 }}>
+          {isExpanded ? 'See Less' : 'See More'}
+        </ThemedText>
+      </TouchableOpacity>
 
-      <TouchableOpacity style={[styles.subscribeButton, { backgroundColor: '#5B7E68' }]}>
-        <Text style={styles.subscribeButtonText}>Subscribe</Text>
+      <TouchableOpacity 
+        onPress={isSubscribed ? handleStartCourse : handleSubscription}
+        style={[styles.subscribeButton, { backgroundColor: '#5B7E68' }]}
+      >
+        <Text style={styles.subscribeButtonText}>{isSubscribed ? 'Start Now' : 'Enroll Now'}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -81,10 +174,10 @@ export default function AllModuleDetail() {
     <View style={styles.tabContent}>
         <View style={styles.lessonsHeader}>
             <ThemedText type="subtitle">Lessons</ThemedText>
-            <ThemedText style={{color: colors.textSecondary, fontSize: 12}}>7 Sections</ThemedText>
+            <ThemedText style={{color: colors.textSecondary, fontSize: 12}}>{courseData.lessons.length} Modules</ThemedText>
         </View>
         
-      {MOCK_DETAILS.lessons.map((lesson, index) => (
+      {courseData.lessons.map((lesson: any, index: number) => (
         <View key={lesson.id} style={{marginBottom: 16}}>
             {lesson.section && (
                 <View style={styles.sectionHeader}>
@@ -98,7 +191,7 @@ export default function AllModuleDetail() {
               <View style={{flex: 1}}>
                   <View style={{flexDirection: 'row', alignItems: 'center', gap: 4}}>
                       <ThemedText style={styles.lessonTitle}>{lesson.title}</ThemedText>
-                      {lesson.isTrophy && <Text>🏆</Text>}
+                      {(lesson as any).isTrophy && <Text>🏆</Text>}
                   </View>
                   <ThemedText style={styles.lessonDuration}>Videos - {lesson.duration}</ThemedText>
               </View>
@@ -107,43 +200,53 @@ export default function AllModuleDetail() {
         </View>
       ))}
 
-      <TouchableOpacity style={[styles.subscribeButton, { backgroundColor: '#5B7E68', marginTop: 20 }]}>
-        <Text style={styles.subscribeButtonText}>Subscribe</Text>
+      <TouchableOpacity 
+        onPress={isSubscribed ? handleStartCourse : handleSubscription}
+        style={[styles.subscribeButton, { backgroundColor: '#5B7E68', marginTop: 20 }]}
+      >
+        <Text style={styles.subscribeButtonText}>{isSubscribed ? 'Start Now' : 'Enroll Now'}</Text>
       </TouchableOpacity>
     </View>
   );
 
   const renderReviews = () => (
-    <View style={styles.tabContent}>
+     <View style={styles.tabContent}>
        <ThemedText type="subtitle" style={{marginBottom: 16}}>Reviews</ThemedText>
-      {MOCK_DETAILS.reviews.map((review) => (
-        <View key={review.id} style={styles.reviewItem}>
-          <View style={styles.reviewHeader}>
-            <View style={styles.avatar} className='overflow-hidden'>
-              <Image
-                source={review.avatar} 
-                style={{
-                  width: '100%',
-                  height: '100%',
-                }}
-                resizeMode="cover"
-              />
+      {courseData.reviews.length > 0 ? (
+        courseData.reviews.map((review:any) => (
+          <View key={review.id} style={styles.reviewItem}>
+            <View style={styles.reviewHeader}>
+              <View style={styles.avatar} className='overflow-hidden'>
+                <Image
+                  source={review.avatar} 
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                  }}
+                  contentFit="cover"
+                />
+              </View>
+              <View>
+                  <ThemedText style={styles.reviewName}>{review.name}</ThemedText>
+              </View>
+              <ThemedText style={styles.reviewTime}>{review.time}</ThemedText>
             </View>
-            <View>
-                <ThemedText style={styles.reviewName}>{review.name}</ThemedText>
-                {/* <View style={{flexDirection:'row', alignItems:'center', gap: 4}}>
-                    <ThemedText>{review.rating}</ThemedText>
-                    <Ionicons name="star" size={14} color="#FBBC05" />
-                </View> */}
-            </View>
-            <ThemedText style={styles.reviewTime}>{review.time}</ThemedText>
+            <ThemedText style={styles.reviewText}>{review.text}</ThemedText>
           </View>
-          <ThemedText style={styles.reviewText}>{review.text}</ThemedText>
+        ))
+      ) : (
+        <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+          <ThemedText style={{ color: colors.textSecondary, textAlign: 'center' }}>
+            There are no reviews for this module yet.
+          </ThemedText>
         </View>
-      ))}
+      )}
       
-       <TouchableOpacity style={[styles.subscribeButton, { backgroundColor: '#5B7E68', marginTop: 20 }]}>
-        <Text style={styles.subscribeButtonText}>Subscribe</Text>
+       <TouchableOpacity 
+        onPress={isSubscribed ? handleStartCourse : handleSubscription}
+        style={[styles.subscribeButton, { backgroundColor: '#5B7E68', marginTop: 20 }]}
+      >
+        <Text style={styles.subscribeButtonText}>{isSubscribed ? 'Start Course' : 'Enroll Now'}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -162,42 +265,44 @@ export default function AllModuleDetail() {
         </View>
 
         {/* Instructor Info */}
-        <View style={styles.instructorContainer}>
-           <View style={styles.instructorAvatar} className='overflow-hidden'>
-              <Image
-                source={MOCK_DETAILS.instructor.avatar} 
-                style={{
-                  width: '100%',
-                  height: '100%',
-                }}
-                resizeMode="cover"
-              />
-           </View>
-           <View>
-               <ThemedText style={{color: '#4A90E2', fontSize: 12, fontWeight: '600'}}>Instructor</ThemedText>
-               <ThemedText style={{fontWeight: 'bold', fontSize: 16}}>{MOCK_DETAILS.instructor.name}</ThemedText>
-           </View>
-        </View>
+         <View style={styles.instructorContainer}>
+            <View style={styles.instructorAvatar} className='overflow-hidden'>
+               <Image
+                 source={courseData.instructor.avatar} 
+                 style={{
+                   width: '100%',
+                   height: '100%',
+                 }}
+                 contentFit="cover"
+                 transition={500}
+               />
+            </View>
+            <View>
+                <ThemedText className='m-0 p-0' style={{color: '#4A90E2', fontSize: 12, fontWeight: '600'}}>Mentor</ThemedText>
+                <ThemedText className='-mt-2 p-0' style={{fontWeight: 'bold', fontSize: 16}}>{courseData.instructor.name}</ThemedText>
+            </View>
+         </View>
 
         {/* Hero Image */}
-        <Image
-          source={require('@/assets/images/woman.png')} 
+         <Image
+          source={fetchedCourse.thumbnail ? { uri: fetchedCourse.thumbnail } : require('@/assets/images/woman.png')} 
           style={styles.heroImage}
-          resizeMode="cover"
+          contentFit="cover"
+          transition={500}
         />
         {/* Note: Using a placeholder if specific image not found, will rely on what's available or use a color block */}
 
-        <View style={styles.contentContainer}>
-            <ThemedText type="title" style={styles.title}>{MOCK_DETAILS.title}</ThemedText>
+        <View style={styles.contentContainer} className='-mt-2'>
+            <ThemedText type="subtitle" style={styles.title}>{courseData.title}</ThemedText>
             
             <View style={styles.ratingRow}>
                 <View style={{flexDirection: 'row', gap: 2}}>
-                    {[1,2,3,4,5].map(i => <Ionicons key={i} name="star" size={16} color="#FBBC05" />)}
+                    {[1,2,3,4,5].map(i => <Ionicons key={i} name="star" size={16} color={i <= Math.round(courseData.rating) ? "#FBBC05" : "#CCC"} />)}
                 </View>
-                <ThemedText style={{fontWeight: 'bold', marginLeft: 4}}>4.6</ThemedText>
-                <ThemedText style={{color: colors.textSecondary, fontSize: 12}}>({MOCK_DETAILS.ratingCount} ratings)</ThemedText>
+                <ThemedText style={{fontWeight: 'bold', marginLeft: 4}}>{courseData.rating}</ThemedText>
+                <ThemedText style={{color: colors.textSecondary, fontSize: 12}}>({courseData.ratingCount} ratings)</ThemedText>
                 <View style={{flex:1}} />
-                <ThemedText style={{color: colors.textSecondary, fontSize: 12}}>{MOCK_DETAILS.studentCount}students</ThemedText>
+                <ThemedText style={{color: colors.textSecondary, fontSize: 12}}>{courseData.studentCount} students</ThemedText>
             </View>
 
             {/* Tabs */}
@@ -219,6 +324,45 @@ export default function AllModuleDetail() {
 
         </View>
       </ScrollView>
+
+      {/* Premium Upgrade Modal */}
+      <Modal
+        visible={showPremiumModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPremiumModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
+             <View style={styles.modalIconContainer}>
+                <Ionicons name="lock-closed" size={40} color={colors.primary} />
+             </View>
+            <ThemedText type="subtitle" style={styles.modalTitle}>Premium Module</ThemedText>
+            <ThemedText style={styles.modalDescription}>
+              This module is exclusive to premium members. Upgrade your account to access professional skills, mentor support, and more.
+            </ThemedText>
+            
+            <View style={styles.modalButtons}>
+              <TouchableOpacity 
+                onPress={() => setShowPremiumModal(false)}
+                style={[styles.modalButton, { backgroundColor: colors.bglight01 }]}
+              >
+                <ThemedText style={{ fontWeight: '600' }}>Cancel</ThemedText>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                onPress={() => {
+                    setShowPremiumModal(false);
+                    router.push("/reward-points"); // Or whichever screen handles premium
+                }}
+                style={[styles.modalButton, { backgroundColor: colors.primary }]}
+              >
+                <Text style={{ color: 'white', fontWeight: 'bold' }}>Upgrade Now</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -391,5 +535,51 @@ const styles = StyleSheet.create({
       lineHeight: 20,
       fontSize: 14, 
       marginTop: 4
+  },
+  // Modal Styles
+  modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20
+  },
+  modalContent: {
+      width: '100%',
+      borderRadius: 16,
+      padding: 24,
+      alignItems: 'center'
+  },
+  modalIconContainer: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      backgroundColor: '#5A7C651A',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 16
+  },
+  modalTitle: {
+      fontSize: 20,
+      fontWeight: 'bold',
+      marginBottom: 12
+  },
+  modalDescription: {
+      textAlign: 'center',
+      color: '#666',
+      lineHeight: 20,
+      marginBottom: 24
+  },
+  modalButtons: {
+      flexDirection: 'row',
+      gap: 12,
+      width: '100%'
+  },
+  modalButton: {
+      flex: 1,
+      height: 48,
+      borderRadius: 8,
+      justifyContent: 'center',
+      alignItems: 'center'
   }
 });

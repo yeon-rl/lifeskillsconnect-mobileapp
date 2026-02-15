@@ -1,4 +1,5 @@
 import { useThemedColors } from "@/hooks/use-themed-colors";
+import { useNotificationStore } from "@/store/notificationStore";
 import { useUserStore } from "@/store/userStore";
 import { useRouter } from "expo-router";
 import React from "react";
@@ -11,7 +12,7 @@ const UserHeader = () => {
   const name = "Zeeno";
   const colors = useThemedColors();
   const router = useRouter();
-  const [hasNotifications] = React.useState(true); // Set to true when there are new notifications
+  const { unreadCount } = useNotificationStore();
 
   const { currentUser } = useUserStore();
 
@@ -38,17 +39,28 @@ const UserHeader = () => {
               resizeMode="cover"
             />
           </View>
+
           <View>
             <ThemedText style={{ color: colors.textSecondary }} type="small">
               Hey {currentUser?.username}, ready to grow today?
             </ThemedText>
+            <View className="flex-row items-center gap-1">
             <ThemedText className="font-bold">
               {currentUser?.fullname?.split(" ")[0]}
+              {
+                currentUser?.is_premium ? (
+                  <Svg width="17" height="17" viewBox="0 0 17 17" fill="none">
+                    <Path fill-rule="evenodd" clip-rule="evenodd" d="M5.29417 1.29084C5.6458 0.885192 6.08061 0.559964 6.56906 0.337235C7.05751 0.114506 7.58817 -0.000508593 8.125 1.69057e-06C9.25584 1.69057e-06 10.2692 0.500002 10.9558 1.29084C11.4914 1.25259 12.029 1.33007 12.5319 1.51801C13.0349 1.70594 13.4916 1.99993 13.8708 2.38C14.2508 2.75922 14.5446 3.21573 14.7326 3.71855C14.9205 4.22137 14.9981 4.75873 14.96 5.29417C15.3655 5.64588 15.6906 6.08072 15.9131 6.56916C16.1357 7.05761 16.2506 7.58823 16.25 8.125C16.2505 8.66184 16.1355 9.1925 15.9128 9.68095C15.69 10.1694 15.3648 10.6042 14.9592 10.9558C14.9972 11.4913 14.9197 12.0286 14.7317 12.5315C14.5438 13.0343 14.2499 13.4908 13.87 13.87C13.4908 14.2499 13.0343 14.5438 12.5315 14.7317C12.0286 14.9197 11.4913 14.9972 10.9558 14.9592C10.6042 15.3648 10.1694 15.69 9.68095 15.9128C9.1925 16.1355 8.66184 16.2505 8.125 16.25C7.58817 16.2505 7.05751 16.1355 6.56906 15.9128C6.08061 15.69 5.6458 15.3648 5.29417 14.9592C4.75865 14.9975 4.22115 14.9202 3.71817 14.7324C3.2152 14.5446 2.75852 14.2508 2.37917 13.8708C1.99914 13.4915 1.70518 13.0349 1.51725 12.5319C1.32932 12.0289 1.25182 11.4914 1.29 10.9558C0.884511 10.6041 0.55944 10.1693 0.336856 9.68084C0.114273 9.19239 -0.000611344 8.66177 2.44654e-06 8.125C2.44654e-06 6.99417 0.500003 5.98083 1.29084 5.29417C1.25272 4.75872 1.33025 4.22135 1.51819 3.71852C1.70612 3.21569 2.00004 2.75919 2.38 2.38C2.75919 2.00004 3.21569 1.70612 3.71852 1.51818C4.22135 1.33025 4.75872 1.25272 5.29417 1.29084ZM11.1333 6.61334C11.1833 6.54671 11.2195 6.47076 11.2397 6.38996C11.26 6.30915 11.2638 6.22512 11.2511 6.1428C11.2384 6.06047 11.2094 5.98152 11.1657 5.91058C11.1221 5.83964 11.0647 5.77815 10.9969 5.72971C10.9291 5.68127 10.8523 5.64687 10.7711 5.62853C10.6898 5.61018 10.6057 5.60826 10.5237 5.62289C10.4417 5.63751 10.3635 5.66838 10.2936 5.71368C10.2237 5.75898 10.1635 5.81779 10.1167 5.88667L7.42 9.66167L6.06667 8.30834C5.94819 8.19794 5.79148 8.13783 5.62957 8.14069C5.46765 8.14355 5.31316 8.20914 5.19865 8.32365C5.08414 8.43816 5.01855 8.59265 5.01569 8.75457C5.01283 8.91648 5.07294 9.07319 5.18334 9.19167L7.05834 11.0667C7.12249 11.1308 7.19984 11.1802 7.28499 11.2114C7.37015 11.2426 7.46108 11.2549 7.55147 11.2474C7.64186 11.24 7.72955 11.213 7.80844 11.1682C7.88734 11.1235 7.95554 11.0621 8.00834 10.9883L11.1333 6.61334Z" fill="#1DA1F2"/>
+                  </Svg>
+                ) : null
+              }
             </ThemedText>
+
+            </View>
           </View>
         </View>
         <View className="flex-row gap-2">
-          <Pressable>
+          <Pressable onPress={() => router.push('/support')}>
             <Svg
               width="24"
               height="24"
@@ -91,18 +103,35 @@ const UserHeader = () => {
                 fill="#5A7C65"
               />
             </Svg>
-            {hasNotifications && (
+            {unreadCount > 0 && (
               <View
                 style={{
                   position: "absolute",
-                  top: -4,
-                  right: -4,
-                  width: 10,
-                  height: 10,
-                  borderRadius: 5,
-                  backgroundColor: "#3B82F6",
+                  top: -6,
+                  right: -6,
+                  minWidth: 16,
+                  height: 16,
+                  borderRadius: 8,
+                  backgroundColor: "#E11D48", // Using a vibrant rose/red for the badge
+                  justifyContent: "center",
+                  alignItems: "center",
+                  paddingHorizontal: 4,
+                  borderWidth: 1.5,
+                  borderColor: colors.background, // Contrast with header background
                 }}
-              />
+              >
+                <ThemedText
+                  style={{
+                    color: "white",
+                    fontSize: 8,
+                    fontWeight: "bold",
+                    lineHeight: 12,
+                    textAlign: "center",
+                  }}
+                >
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </ThemedText>
+              </View>
             )}
           </Pressable>
         </View>

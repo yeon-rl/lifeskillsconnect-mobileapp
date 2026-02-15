@@ -1,9 +1,11 @@
 import CardComponent2 from '@/components/CardComponent2';
 import { ThemedText } from '@/components/themed-text';
 import { useThemedColors } from '@/hooks/use-themed-colors';
+import { useFetchCourses } from "@/hooks/useCourses";
+import { CourseProp } from '@/store/courseStore';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   Keyboard,
@@ -16,42 +18,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// --- MOCK DATA ---
-const ALL_CATEGORIES = [
-  'Career Guidance',
-  'Professional Development',
-  'Financial literacy and Budgeting',
-  'Health',
-  'Interview and workplace skills'
-];
 
-interface ModuleItem {
-  id: string;
-  title: string;
-  rating: number;
-  reviews: number;
-  image?: any; // In a real app, use source type
-}
-
-const LATEST_MODULES: ModuleItem[] = [
-  { id: '1', title: 'Interview and workplace skills', rating: 4.6, reviews: 344 },
-  { id: '2', title: 'Interview and workplace skills', rating: 4.6, reviews: 344 },
-];
-
-const CAREER_GUIDANCE: ModuleItem[] = [
-  { id: '3', title: 'Resume and cover letter writing', rating: 4.8, reviews: 150 },
-  { id: '4', title: 'Resume and cover letter writing', rating: 4.8, reviews: 150 },
-];
-
-const PROFESSIONAL_DEV: ModuleItem[] = [
-  { id: '5', title: 'Networking and personal branding', rating: 4.7, reviews: 200 },
-  { id: '6', title: 'Networking and personal branding', rating: 4.7, reviews: 200 },
-];
-
-const SKILL_ENHANCEMENT: ModuleItem[] = [
-  { id: '7', title: 'Time management and productivity', rating: 4.9, reviews: 120 },
-  { id: '8', title: 'Time management and productivity', rating: 4.9, reviews: 120 },
-];
 
 // --- COMPONENT ---
 
@@ -62,6 +29,51 @@ export default function AllModules() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const inputRef = useRef<TextInput>(null);
+
+
+  const { courses: coursesData, isLoading: coursesLoading, error: coursesError } = useFetchCourses();
+  const courses = useMemo(() => coursesData?.courses || [], [coursesData]);
+
+  console.log('Courses in AllModules:', {
+    type: typeof coursesData,
+    isArray: Array.isArray(coursesData?.courses),
+    value: coursesData
+  });
+
+  // console.log(coursesData, "what exactly is here")
+
+  // Dynamic categories from courses
+  const categoryOptions = useMemo(() => {
+    const categories = Array.from(new Set(courses.map(c => c.category?.name).filter(Boolean)));
+    return categories;
+  }, [courses]);
+
+  // Grouped courses by category
+  const groupedCourses = useMemo(() => {
+    const groups: { [key: string]: CourseProp[] } = {};
+    
+    // Latest Modules (Sorted by created_at, top 5)
+    const latest = [...courses].sort((a, b) => 
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    ).slice(0, 5);
+    
+    if (latest.length > 0) {
+      groups['Latest Module'] = latest;
+    }
+
+    // Group by category
+    courses.forEach(course => {
+      const catName = course.category?.name;
+      if (catName) {
+        if (!groups[catName]) {
+          groups[catName] = [];
+        }
+        groups[catName].push(course);
+      }
+    });
+
+    return groups;
+  }, [courses]);
 
   const handleSearchFocus = () => setIsSearching(true);
   const handleCancelSearch = () => {
@@ -75,22 +87,24 @@ export default function AllModules() {
     router.push(`/all-module-detail/${id}`);
   };
 
-  const renderSection = (title: string, data: ModuleItem[]) => (
+  const renderSection = (title: string, data: CourseProp[]) => (
     <View style={styles.sectionContainer} className='mt-5'>
       <ThemedText type="subtitle" style={styles.sectionTitle}>{title}</ThemedText>
       <FlatList
         horizontal
         data={data}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.id.toString()}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
         renderItem={({ item }) => (
           <View style={{ marginRight: 16 }}>
             <CardComponent2
               title={item.title}
-              rating={item.rating}
-              reviews={item.reviews}
-              onViewModule={() => navigateToDetail(item.id)}
+              rating={item.averageRating}
+              reviews={item.reviewCount}
+              isPremium={item.is_paid === 1}
+              image={item.thumbnail}
+              onViewModule={() => navigateToDetail(item.id.toString())}
             />
           </View>
         )}
@@ -101,22 +115,12 @@ export default function AllModules() {
   const renderSearchView = () => (
      <View style={styles.searchViewContainer}>
         <View style={styles.tagsContainer}>
-            {ALL_CATEGORIES.map((cat, index) => (
+            {categoryOptions.map((cat, index) => (
                 <TouchableOpacity 
                     key={index} 
                     style={styles.categoryTag}
                     onPress={() => {
-                        setSearchQuery(cat);
-                        // IsSearching is already true if we are here (implied by view structure? no)
-                        // Actually renderSearchView is called when isSearching=true but query empty?
-                        // Or maybe we want to start search if not.
-                        // But wait, renderSearchView is shown when isSearching is true OR false?
-                        // No, let's check usage.
-                        // renderSearchView is in the 'else' of query length check.
-                        // So isSearching must be true.
-                        // Wait, if I set query, it auto filters.
-                        // But I need to ensure keyboard doesn't dismiss if I don't want it to
-                        // Or maybe I do want to dismiss it? usually tag click searches.
+                        setSearchQuery(cat!);
                         Keyboard.dismiss();
                     }}
                 >
@@ -156,25 +160,22 @@ export default function AllModules() {
          searchQuery.length > 0 ? (
             <View style={styles.searchViewContainer}>
                 <FlatList
-                    data={[
-                        ...LATEST_MODULES.map(i => ({...i, category: 'Latest Module'})), 
-                        ...CAREER_GUIDANCE.map(i => ({...i, category: 'Career Guidance'})), 
-                        ...PROFESSIONAL_DEV.map(i => ({...i, category: 'Professional Development'})), 
-                        ...SKILL_ENHANCEMENT.map(i => ({...i, category: 'Skill Enhancement'}))
-                    ].filter(item => 
-                        item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        item.category.toLowerCase().includes(searchQuery.toLowerCase())
+                    data={courses.filter(item => 
+                        item.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        item.category?.name?.toLowerCase().includes(searchQuery.toLowerCase())
                     )}
-                    keyExtractor={(item, index) => item.id + index}
+                    keyExtractor={(item) => item.id.toString()}
                     numColumns={2}
                     columnWrapperStyle={{ justifyContent: 'space-between', marginBottom: 16 }}
                     renderItem={({ item }) => (
                          <View style={{ width: '48%' }}>
                             <CardComponent2
                                 title={item.title}
-                                rating={item.rating}
-                                reviews={item.reviews}
-                                onViewModule={() => navigateToDetail(item.id)}
+                                rating={item.averageRating}
+                                reviews={item.reviewCount}
+                                isPremium={item.is_paid === 1}
+                                image={item.thumbnail}
+                                onViewModule={() => navigateToDetail(item.id.toString())}
                             />
                         </View>
                     )}
@@ -186,10 +187,11 @@ export default function AllModules() {
          )
       ) : (
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-            {renderSection('Latest Module', LATEST_MODULES)}
-            {renderSection('Career Guidance', CAREER_GUIDANCE)}
-            {renderSection('Professional Development', PROFESSIONAL_DEV)}
-            {renderSection('Skill Enhancement', SKILL_ENHANCEMENT)}
+            {Object.keys(groupedCourses).map(category => (
+                <React.Fragment key={category}>
+                    {renderSection(category, groupedCourses[category])}
+                </React.Fragment>
+            ))}
             <View style={{height: 100}} /> 
         </ScrollView>
       )}

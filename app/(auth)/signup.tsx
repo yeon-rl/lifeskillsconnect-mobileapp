@@ -1,21 +1,25 @@
 import { ThemedText } from "@/components/themed-text";
 import ThemedView from "@/components/themedView";
 import { useThemedColors } from "@/hooks/use-themed-colors";
+import { authService } from "@/services/api/apiServices";
+import { useUserStore } from "@/store/userStore";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
-    FlatList,
-    Image,
-    Modal,
-    Pressable,
-    ScrollView,
-    TextInput,
-    View,
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Modal,
+  Pressable,
+  ScrollView,
+  TextInput,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
+import { toast } from "sonner-native";
 
 type SignupStep = "email" | "otp" | "account" | "interests" | "success";
 
@@ -353,6 +357,7 @@ export default function SignupScreen() {
   const [countryCodeSearch, setCountryCodeSearch] = useState("");
   const [nationalitySearch, setNationalitySearch] = useState("");
   const [interestSearch, setInterestSearch] = useState("");
+  const [loading, setLoading] = useState(false);
 
   // OTP input refs for auto-advance
   const otpRef1 = useRef<TextInput>(null);
@@ -363,6 +368,7 @@ export default function SignupScreen() {
 
   const colors = useThemedColors();
   const router = useRouter();
+  const { currentUser, setUser, setAuthToken, setAuthenticated, updateUser } = useUserStore();
 
   // Email validation
   const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -411,10 +417,134 @@ export default function SignupScreen() {
   };
 
   const handleDoneSuccess = () => {
+    setAuthenticated(true);
     router.push("/(tabs)");
   };
 
-  console.log("Rendering SignupScreen, current step:", currentStep);
+  const handleSignup = async () => {
+    try {
+      setLoading(true);
+      const response = await authService.signup({
+        email,
+        password,
+      });
+
+      // If signup returns user/token, store it
+      if (response.user && response.token) {
+        setAuthToken(response.token);
+        setUser(response.user, false);
+      } else if (response.user) {
+        setUser(response.user, false);
+      }
+
+      setCurrentStep("otp");
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || "An error occurred during signup";
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOTP = async () => {
+    try {
+      setLoading(true);
+      const response = await authService.verifyOTP({ email, otp });
+
+      // Store user/token returned from verification
+      if (response.user && response.token) {
+        setAuthToken(response.token);
+        setUser(response.user, false);
+      } else if (response.user) {
+        setUser(response.user, false);
+      }
+
+      setCurrentStep("account");
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || "Invalid OTP";
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOTP = async () => {
+    try {
+      setLoading(true);
+      await authService.resendOTP({ email });
+      toast.success("OTP resent to your email");
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || "Failed to resend OTP";
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCompleteProfile = async () => {
+    if (!currentUser?.userId && !currentUser?.id) {
+      toast.error("User session not found. Please try signing up again.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const payload = {
+        userId: currentUser.userId || parseInt(currentUser.id),
+        fullname: accountData.fullName,
+        username: accountData.username,
+        phone: accountData.countryCode + accountData.phoneNumber,
+        nationality: accountData.nationality,
+        date_of_birth: accountData.dateOfBirth?.toISOString().split("T")[0] || "",
+        heardAboutUs: accountData.hearAbout,
+      };
+
+      const response = await authService.completeProfile(payload);
+      
+      // Update store with new profile data
+      updateUser(response.user || response);
+      
+      setCurrentStep("interests");
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || "Failed to complete profile";
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateInterests = async () => {
+    const userId = currentUser?.userId || (currentUser?.id ? parseInt(currentUser.id) : null);
+    
+    if (!userId) {
+      toast.error("User session not found.");
+      return;
+    }
+
+    if (selectedInterests.length < 3) {
+      toast.error("Please select at least 3 skills to get started.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      // Map interest IDs to names as the API likely expects names based on the example
+      const interestNames = selectedInterests.map(id => INTERESTS.find(i => i.id === id)?.name || id);
+
+      await authService.updateInterests({
+        userId: userId,
+        interests: interestNames,
+      });
+
+      setCurrentStep("success");
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || "Failed to update interests";
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Screen: Email & Password
   if (currentStep === "email") {
@@ -604,15 +734,19 @@ export default function SignupScreen() {
               backgroundColor: isEmailStepValid ? "#5A7C65" : "#5A7C651A",
             }}
             className="rounded-lg py-4 items-center mb-4"
-            disabled={!isEmailStepValid}
-            onPress={() => setCurrentStep("otp")}
+            disabled={!isEmailStepValid || loading}
+            onPress={handleSignup}
           >
-            <ThemedText
-              className="font-semibold text-base"
-              style={{ color: isEmailStepValid ? "#fff" : "#5A7C65" }}
-            >
-              Next
-            </ThemedText>
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <ThemedText
+                className="font-semibold text-base"
+                style={{ color: isEmailStepValid ? "#fff" : "#5A7C65" }}
+              >
+                Next
+              </ThemedText>
+            )}
           </Pressable>
 
           {/* Social Signup */}
@@ -822,13 +956,15 @@ export default function SignupScreen() {
             )}
           </View>
 
-          <ThemedText
-            style={{ color: colors.text }}
-            type="small"
-            className="mb-6 text-center"
-          >
-            Resend code in 00:30
-          </ThemedText>
+          <Pressable onPress={handleResendOTP} disabled={loading}>
+            <ThemedText
+              style={{ color: colors.primary }}
+              type="small"
+              className="mb-6 text-center font-semibold"
+            >
+              Resend code
+            </ThemedText>
+          </Pressable>
 
           {/* Verify Button */}
           <Pressable
@@ -836,15 +972,19 @@ export default function SignupScreen() {
               backgroundColor: isOtpValid ? "#5A7C65" : "#5A7C651A",
             }}
             className="rounded-lg py-4 items-center"
-            disabled={!isOtpValid}
-            onPress={() => setCurrentStep("account")}
+            disabled={!isOtpValid || loading}
+            onPress={handleVerifyOTP}
           >
-            <ThemedText
-              className="font-semibold text-base"
-              style={{ color: isOtpValid ? "#fff" : "#5A7C65" }}
-            >
-              Verify
-            </ThemedText>
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <ThemedText
+                className="font-semibold text-base"
+                style={{ color: isOtpValid ? "#fff" : "#5A7C65" }}
+              >
+                Verify
+              </ThemedText>
+            )}
           </Pressable>
         </ThemedView>
       </SafeAreaView>
@@ -1204,15 +1344,19 @@ export default function SignupScreen() {
                 backgroundColor: isAccountStepValid ? "#5A7C65" : "#5A7C651A",
               }}
               className="rounded-lg py-4 items-center mb-8"
-              disabled={!isAccountStepValid}
-              onPress={() => setCurrentStep("interests")}
+              disabled={!isAccountStepValid || loading}
+              onPress={handleCompleteProfile}
             >
-              <ThemedText
-                className="font-semibold text-base"
-                style={{ color: isAccountStepValid ? "#fff" : "#5A7C65" }}
-              >
-                Next
-              </ThemedText>
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <ThemedText
+                  className="font-semibold text-base"
+                  style={{ color: isAccountStepValid ? "#fff" : "#5A7C65" }}
+                >
+                  Next
+                </ThemedText>
+              )}
             </Pressable>
           </ScrollView>
         </ThemedView>
@@ -1370,17 +1514,21 @@ export default function SignupScreen() {
                 selectedInterests.length >= 3 ? "#5A7C65" : "#5A7C651A",
             }}
             className="rounded-lg py-4 items-center mb-8"
-            disabled={selectedInterests.length < 3}
-            onPress={() => setCurrentStep("success")}
+            disabled={selectedInterests.length < 3 || loading}
+            onPress={handleUpdateInterests}
           >
-            <ThemedText
-              className="font-semibold text-base"
-              style={{
-                color: selectedInterests.length >= 3 ? "#fff" : "#5A7C65",
-              }}
-            >
-              Next
-            </ThemedText>
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <ThemedText
+                className="font-semibold text-base"
+                style={{
+                  color: selectedInterests.length >= 3 ? "#fff" : "#5A7C65",
+                }}
+              >
+                Next
+              </ThemedText>
+            )}
           </Pressable>
 
           {/* Interest Detail Modal */}

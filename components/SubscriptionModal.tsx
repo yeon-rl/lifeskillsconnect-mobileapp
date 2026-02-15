@@ -1,7 +1,12 @@
 import { useThemedColors } from '@/hooks/use-themed-colors';
+import { authService, subscriptionService } from '@/services/api/apiServices';
+import { useUserStore } from '@/store/userStore';
 import { Ionicons } from '@expo/vector-icons';
+import { usePaymentSheet } from '@stripe/stripe-react-native';
 import React, { useState } from 'react';
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { requestPurchase } from 'react-native-iap';
+import { toast } from 'sonner-native';
 
 interface SubscriptionModalProps {
   visible: boolean;
@@ -14,21 +19,146 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ visible, o
   const colors = useThemedColors();
   const [step, setStep] = useState<Step>('plans');
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'annually'>('annually');
-  const [selectedPayment, setSelectedPayment] = useState<'apple' | 'card' | 'paypal'>('apple');
+  const [selectedPayment, setSelectedPayment] = useState<'card'>('card');
+  const [loading, setLoading] = useState(false);
 
   const handleClose = () => {
     setStep('plans'); // Reset on close
     onClose();
   };
 
-  const handleContinue = () => {
+  const { initPaymentSheet, presentPaymentSheet } = usePaymentSheet();
+  // const { connected, products, getProducts: fetchProducts, currentPurchase, finishTransaction } = useIAP();
+  
+  // Stubs for disabled IAP
+  const connected = false;
+  const products = [];
+  const fetchProducts = async () => {};
+  const currentPurchase = null;
+  const finishTransaction = async () => {};
+
+  const handleContinue = async () => {
     if (step === 'plans') {
       setStep('payment');
+      /* 
+      if (Platform.OS === 'android') {
+        initializeStripe();
+      } else if (Platform.OS === 'ios') {
+        initializeIAP();
+      }
+      */
     } else {
-      // Finalize payment logic here
-      handleClose();
+      toast.info("Credit card payment is coming soon!");
+      /*
+      if (Platform.OS === 'android') {
+        handleStripePayment();
+      } else if (Platform.OS === 'ios') {
+        handleIAPPayment();
+      }
+      */
     }
   };
+
+  const initializeStripe = async () => {
+    try {
+      const { authToken } = useUserStore.getState();
+      const plan = selectedPlan === 'annually' ? 'yearly' : 'monthly';
+      const data = await subscriptionService.getStripePaymentIntent(plan, authToken || undefined);
+      
+      if (data?.paymentIntent) {
+        const { error } = await initPaymentSheet({
+          merchantDisplayName: 'LifeSkills Connect',
+          customerId: data.customer,
+          customerEphemeralKeySecret: data.ephemeralKey,
+          paymentIntentClientSecret: data.paymentIntent,
+          allowsDelayedPaymentMethods: false,
+          defaultBillingDetails: {
+            name: useUserStore.getState().currentUser?.fullname,
+          }
+        });
+        if (error) {
+          console.error("Stripe init error:", error);
+        }
+      }
+    } catch (err) {
+      console.error("Stripe setup error:", err);
+    }
+  };
+
+  const initializeIAP = async () => {
+    try {
+      const productIds = Platform.select({
+        ios: ['com.lifeskills.monthly', 'com.lifeskills.annually'],
+        default: [],
+      });
+      await fetchProducts({ skus: productIds });
+    } catch (err) {
+      console.error("IAP fetch error:", err);
+    }
+  };
+
+  const handleStripePayment = async () => {
+    setLoading(true);
+    try {
+      const { error } = await presentPaymentSheet();
+      if (error) {
+        if (error.code !== 'Canceled') {
+          toast.error(error.message);
+        }
+      } else {
+        toast.success("Payment successful!");
+        await refreshProfile();
+        handleClose();
+      }
+    } catch (err) {
+      console.error("Stripe payment error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleIAPPayment = async () => {
+    setLoading(true);
+    try {
+      const sku = selectedPlan === 'annually' ? 'com.lifeskills.annually' : 'com.lifeskills.monthly';
+      await requestPurchase({ sku });
+      // The actual verification and profile refresh will happen in a useEffect listening to currentPurchase
+    } catch (err: any) {
+      console.error("IAP purchase error:", err);
+      toast.error(err.message || "Purchase failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const refreshProfile = async () => {
+    const { authToken } = useUserStore.getState();
+    const profile = await authService.getProfile(authToken || undefined);
+    if (profile?.user) {
+      useUserStore.getState().setUser(profile.user);
+    }
+  };
+
+  /* 
+  React.useEffect(() => {
+    const checkIAP = async () => {
+      if (currentPurchase) {
+        try {
+          const { authToken } = useUserStore.getState();
+          await subscriptionService.verifyIAPReceipt(currentPurchase.transactionReceipt, authToken || undefined);
+          await finishTransaction({ purchase: currentPurchase });
+          toast.success("Welcome to Premium!");
+          await refreshProfile();
+          handleClose();
+        } catch (err) {
+          console.error("IAP verification error:", err);
+          toast.error("Failed to verify purchase");
+        }
+      }
+    };
+    checkIAP();
+  }, [currentPurchase]);
+  */
 
   const PlanOption = ({ 
     type, 
@@ -89,7 +219,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ visible, o
     label,
     icon
   }: { 
-    type: 'apple' | 'card' | 'paypal', 
+    type: 'card', 
     label: string,
     icon: React.ReactNode
   }) => (
@@ -98,7 +228,10 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ visible, o
         styles.paymentCard,
         selectedPayment === type && styles.selectedPaymentCard
       ]}
-      onPress={() => setSelectedPayment(type)}
+      onPress={() => {
+        setSelectedPayment(type);
+        toast.info("Coming soon");
+      }}
     >
       <View style={styles.paymentIconContainer}>
          {icon}
@@ -141,26 +274,18 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ visible, o
                />
             </View>
           ) : (
-             <View style={styles.contentContainer}>
-                <PaymentOption 
-                  type="apple"
-                  label="Apple Pay"
-                  icon={<Ionicons name="logo-apple" size={24} color="#000" />}
-                />
+              <View style={styles.contentContainer}>
                 <PaymentOption 
                   type="card"
                   label="Card Payment"
                   icon={<Ionicons name="card-outline" size={24} color="#000" />}
                 />
-                <PaymentOption 
-                  type="paypal"
-                  label="PayPal"
-                  icon={<Ionicons name="logo-paypal" size={24} color="#003087" />}
-                />
 
                 <View style={styles.totalContainer}>
                     <Text style={styles.totalLabel}>Total</Text>
-                    <Text style={styles.totalAmount}>£108</Text>
+                    <Text style={styles.totalAmount}>
+                      {selectedPlan === 'annually' ? '£108' : '£11'}
+                    </Text>
                 </View>
              </View>
           )}
@@ -173,12 +298,21 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ visible, o
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity 
-              style={[styles.modalButton, styles.continueButton]} 
+              style={[
+                styles.modalButton, 
+                styles.continueButton,
+                loading && { opacity: 0.7 }
+              ]} 
               onPress={handleContinue}
+              disabled={loading}
             >
-              <Text style={styles.continueButtonText}>
-                {step === 'plans' ? 'Upgrade' : 'Continue'}
-              </Text>
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.continueButtonText}>
+                  {step === 'plans' ? 'Upgrade' : 'Continue'}
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
 

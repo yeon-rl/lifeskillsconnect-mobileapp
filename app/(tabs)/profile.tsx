@@ -1,11 +1,15 @@
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { useTheme } from '@/context/ThemeContext';
 import { useThemedColors } from '@/hooks/use-themed-colors';
+import { userService } from '@/services/api/apiServices';
+import socketClient from '@/services/socket/socketClient';
+import { useCoursesStore } from '@/store/courseStore';
 import { useUserStore } from '@/store/userStore';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Dimensions,
   Image,
   Modal,
@@ -18,6 +22,7 @@ import {
   View
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { toast } from 'sonner-native';
 
 const { width } = Dimensions.get('window');
 
@@ -30,28 +35,77 @@ export default function Profile() {
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [subscriptionModalVisible, setSubscriptionModalVisible] = useState(false);
   
+  const { logout, currentUser, updateUser, authToken } = useUserStore();
+  const { clearCourses } = useCoursesStore();
+  
   // Toggles
-  const [notificationEnabled, setNotificationEnabled] = useState(true);
+  // Use a helper to determine initial state from either field name (singular or plural)
+  // Some API responses might use 'notification_enabled' while the app uses 'notifications_enabled'
+  const getInitialNotificationState = () => {
+    if (currentUser?.notifications_enabled !== undefined) return !!currentUser.notifications_enabled;
+    // @ts-ignore - Handle possible API field naming discrepancy
+    if (currentUser?.notification_enabled !== undefined) return !!currentUser.notification_enabled;
+    return true; // Default to true for new users
+  };
+
+  const [notificationEnabled, setNotificationEnabled] = useState(getInitialNotificationState());
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Sync local state when currentUser changes (e.g. after hydration or background refresh)
+  useEffect(() => {
+    if (currentUser) {
+      const isEnabled = getInitialNotificationState();
+      console.log('[Profile] Syncing notification state from currentUser:', {
+        notifications_enabled: currentUser.notifications_enabled,
+        // @ts-ignore
+        notification_enabled: currentUser.notification_enabled,
+        finalStatus: isEnabled
+      });
+      setNotificationEnabled(isEnabled);
+    }
+  }, [currentUser?.notifications_enabled, (currentUser as any)?.notification_enabled]);
+
+  const { openPremium } = useLocalSearchParams();
+
+  useEffect(() => {
+    if (openPremium === 'true') {
+      setSubscriptionModalVisible(true);
+    }
+  }, [openPremium]);
 
   const handleEditProfile = () => {
     router.push('/edit-profile');
   };
 
-  const handleDeleteAccount = () => {
-    // Implement delete account logic here
-    setDeleteModalVisible(false);
-    console.log("Account deleted");
+  const handleDeleteAccount = async () => {
+    try {
+      setIsDeleting(true);
+      await userService.requestAccountDeletion(authToken || "");
+      setDeleteModalVisible(false);
+      toast.success("Account deletion request sent. You will be notified by email once processed.");
+    } catch (error: any) {
+      console.error("Error deleting account:", error);
+      toast.error("Failed to send account deletion request. Please try again.");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleThemeToggle = (value: boolean) => {
     setThemeMode(value ? 'dark' : 'light');
   };
 
-  const { logout, currentUser } = useUserStore();
+  /*
+  const handleClearCache = () => {
+    clearCourses();
+    toast.success("Cache cleared successfully!");
+  };
+  */
+
   const handleLogout = () => {
+    // Explicitly disconnect socket on logout
+    socketClient.disconnect();
     logout();
-    // Navigation will be handled by navigation guards in _layout.tsx
-    // but adding a backup navigation here
     router.replace("/(auth)/login");
   };
 
@@ -82,6 +136,37 @@ export default function Profile() {
       {rightElement}
     </TouchableOpacity>
   );
+
+  const handleNotificationToggle = async (value: boolean) => {
+    try {
+      // Optimistically update local state
+      setNotificationEnabled(value);
+      
+      const updateData = {
+        userId: currentUser?.userId ? String(currentUser.userId) : "",
+        notifications_enabled: value,
+      };
+
+      console.log('[Profile] Toggling notifications to:', value);
+      const response = await userService.updateUserProfile(updateData, authToken || "");
+      console.log('[Profile] Update Response:', JSON.stringify(response, null, 2));
+      
+      // Update store with response or fallback to intended value
+      if (response && response.user) {
+        // Ensure the intended notifications_enabled value is preserved even if response is lagging
+        updateUser({ ...response.user, notifications_enabled: value });
+      } else {
+        updateUser({ notifications_enabled: value });
+      }
+
+      toast.success(value ? "Notifications turned on" : "Notifications turned off");
+    } catch (error: any) {
+      console.error("Error toggling notifications:", error);
+      // Revert local state on error
+      setNotificationEnabled(!value);
+      toast.error("Failed to update notification settings");
+    }
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -155,7 +240,7 @@ export default function Profile() {
             rightElement={
               <Switch 
                 value={notificationEnabled} 
-                onValueChange={setNotificationEnabled}
+                onValueChange={handleNotificationToggle}
                 trackColor={{ false: '#D1D5DB', true: '#4B5563' }}
                 thumbColor={notificationEnabled ? '#10B981' : '#F3F4F6'}
               />
@@ -208,7 +293,7 @@ export default function Profile() {
             } 
             color="#34A853" 
             label="Support & Help" 
-            onPress={() => router.push('/support')}
+            // onPress={() => router.push('/support')}
           />
           
           <MenuItem 
@@ -234,7 +319,19 @@ export default function Profile() {
             onPress={() => router.push('/reset-password')}
           />
           
-           <MenuItem 
+          {/* 
+          <MenuItem 
+            icon={
+              <Svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <Path d="M2.5 5.83398H17.5M8.33333 9.16732V14.1673M11.6667 9.16732V14.1673M3.33333 5.83398L4.16667 15.834C4.16667 16.4973 4.43006 17.1336 4.89891 17.6025C5.36776 18.0713 6.00363 18.334 6.66663 18.334H13.3333C13.9964 18.334 14.6323 18.0713 15.1011 17.6025C15.5699 17.1336 15.8333 16.4973 15.8333 15.834L16.6667 5.83398M7.5 5.83398V3.33398C7.5 3.11297 7.5878 2.90101 7.74408 2.74473C7.90036 2.58845 8.11232 2.50065 8.33333 2.50065H11.6667C11.8877 2.50065 12.0996 2.58845 12.2559 2.74473C12.4122 2.90101 12.5 3.11297 12.5 3.33398V5.83398" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </Svg>
+            }
+            color="#FF6B00" 
+            label="Clear Cache" 
+            onPress={handleClearCache}
+          />
+          */}
+          <MenuItem 
             icon={
               <Svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                 <Path d="M16.25 4.58398L15.7336 12.9382C15.6016 15.0727 15.5357 16.1399 15.0007 16.9072C14.7361 17.2866 14.3956 17.6067 14.0006 17.8473C13.2017 18.334 12.1325 18.334 9.99392 18.334C7.8526 18.334 6.78192 18.334 5.98254 17.8464C5.58733 17.6054 5.24667 17.2847 4.98223 16.9047C4.4474 16.1362 4.38287 15.0674 4.25384 12.93L3.75 4.58398" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
@@ -275,20 +372,26 @@ export default function Profile() {
             </View>
             <Text style={[styles.modalTitle, { color: colors.text }]}>Delete Account</Text>
             <Text style={[styles.modalText, { color: colors.textSecondary }]}>
-              Are you sure you want to Delete your Accountt?
+              Are you sure you want to Delete your account? Your request will be sent to our team, and you will receive an email once the deletion is approved and your account is deleted.
             </Text>
             <View style={styles.modalButtons}>
               <TouchableOpacity 
                 style={[styles.modalButton, styles.cancelButton]} 
                 onPress={() => setDeleteModalVisible(false)}
+                disabled={isDeleting}
               >
                 <Text style={styles.cancelButtonText}>No</Text>
               </TouchableOpacity>
               <TouchableOpacity 
                 style={[styles.modalButton, styles.deleteButton]} 
                 onPress={handleDeleteAccount}
+                disabled={isDeleting}
               >
-                <Text style={styles.deleteButtonText}>Yes</Text>
+                {isDeleting ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.deleteButtonText}>Yes</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>

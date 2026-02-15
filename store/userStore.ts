@@ -45,8 +45,9 @@ interface UserState {
   error: string | null;
 
   // Actions
-  setUser: (user: User) => void;
+  setUser: (user: User, authenticated?: boolean) => void;
   setAuthToken: (token: string) => void;
+  setAuthenticated: (isAuthenticated: boolean) => void;
   updateUser: (updates: Partial<User>) => void;
   login: (user: User, token: string) => void;
   logout: () => void;
@@ -68,16 +69,21 @@ export const useUserStore = create<UserState>()(
       error: null,
 
       // Actions
-      setUser: (user) =>
+      setUser: (user, authenticated = true) =>
         set({
           currentUser: user,
-          isAuthenticated: true,
+          isAuthenticated: authenticated,
           error: null,
         }),
 
       setAuthToken: (token) =>
         set({
           authToken: token,
+        }),
+
+      setAuthenticated: (isAuthenticated) =>
+        set({
+          isAuthenticated,
         }),
 
       updateUser: (updates) =>
@@ -95,13 +101,19 @@ export const useUserStore = create<UserState>()(
           error: null,
         }),
 
-      logout: () =>
+      logout: async () => {
+        // Reset user state
         set({
           currentUser: null,
           authToken: null,
           isAuthenticated: false,
           error: null,
-        }),
+        });
+        
+        // We no longer call AsyncStorage.clear() to preserve 
+        // onboarding and language selection settings.
+        // Zustand persist handles the 'user-storage' key automatically.
+      },
 
       setLoading: (loading) =>
         set({

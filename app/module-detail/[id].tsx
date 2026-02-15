@@ -1,13 +1,20 @@
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useThemedColors } from "@/hooks/use-themed-colors";
+import { useFetchCourseById } from "@/hooks/useCourses";
+import { useResourceTracking } from "@/hooks/useResourceTracking";
+import { courseService } from '@/services/api/apiServices';
+import { useUserStore } from "@/store";
+import { useCoursesStore } from '@/store/courseStore';
 import Slider from '@react-native-community/slider';
 import { AVPlaybackStatus, ResizeMode, Video } from 'expo-av';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as ScreenOrientation from 'expo-screen-orientation';
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Image,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,6 +23,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
+import { toast } from 'sonner-native';
 
 // --- Types ---
 type Tab = "lessons" | "resources" | "reviews";
@@ -115,69 +123,231 @@ const NavigateMinimizeIcon = ({ color }: { color: string }) => (
 );
 
 
-const initialCourseData = {
-    id: "1",
-    title: "Financial literacy and Budgeting",
-    instructor: "Andrew Dickson",
-    image: require("../../assets/images/woman.png"),
-    description: "Learn how to make smart money moves! This module teaches you the basics of budgeting, saving, spending wisely, and understanding things like credit, debt, and banking.",
-    resources: [
-        { id: "1", title: "Course Outline", duration: "07:00 mins", status: "not-started", description: "Lorem ipsum dolor sit amet consectetur. Maecenas", url: "https://www.w3schools.com/html/mov_bbb.mp4" },
-        { id: "2", title: "intro to finances", duration: "07:00 mins", status: "locked", description: "Lorem ipsum dolor sit amet consectetur. Maecenas", url: "https://www.w3schools.com/html/mov_bbb.mp4" },
-        { id: "3", title: "advanced budgeting", duration: "10:00 mins", status: "locked", description: "Lorem ipsum dolor sit amet consectetur. Maecenas", url: "https://www.w3schools.com/html/mov_bbb.mp4" },
-        { id: "4", title: "investing basics", duration: "15:00 mins", status: "locked", description: "Lorem ipsum dolor sit amet consectetur. Maecenas", url: "https://www.w3schools.com/html/mov_bbb.mp4" },
-        { id: "5", title: "retirement planning", duration: "12:00 mins", status: "locked", description: "Lorem ipsum dolor sit amet consectetur. Maecenas", url: "https://www.w3schools.com/html/mov_bbb.mp4" },
-    ],
-    reviews: [
-        { id: "1", user: "Tracy Evans", rating: 4.6, time: "1 day Ago", comment: "Learn how to make smart money moves! This module teaches you the basics of budgeting, saving, spending wisely, and understanding things like credit.", avatar: require("../../assets/images/woman.png") },
-        { id: "2", user: "Tracy Evans", rating: 4.6, time: "1 day Ago", comment: "Learn how to make smart money moves! This module teaches you the basics of budgeting, saving, spending wisely, and understanding things like credit.", avatar: require("../../assets/images/woman.png") },
-    ],
-    assessment: [
-        {
-            question: "Learn how to make smart money moves! This module teaches you the basics of budgeting, saving,",
-            options: [
-                "Learn how to make smart",
-                "Optimize your workflow with automation features",
-                "Explore the latest design trends for 2023"
-            ]
-        },
-        {
-            question: "This module teaches you the basics of ?",
-            options: [
-                "Learn how to make smart",
-                "Optimize your workflow with automation features",
-                "Explore the latest design trends for 2023"
-            ]
-        }
-    ]
-};
-
 export default function ModuleDetailScreen() {
-  const { id } = useLocalSearchParams();
+  const { id, justEnrolled } = useLocalSearchParams();
   const router = useRouter();
   const colors = useThemedColors();
   const [activeTab, setActiveTab] = useState<Tab>("lessons");
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+  const [showEnrolledModal, setShowEnrolledModal] = useState(justEnrolled === 'true');
+  
+  // Dynamic course fetching
+  const { course: fetchedCourse, isLoading, error } = useFetchCourseById(typeof id === 'string' ? id : null);
+  const { getUserCourseById } = useCoursesStore();
+
+  const { currentUser, authToken } = useUserStore();
+
   
   // State for Lessons/Resources
-  const [lessons, setLessons] = useState(initialCourseData.resources);
-  const [currentLessonId, setCurrentLessonId] = useState(lessons[0].id);
+  const [lessons, setLessons] = useState<any[]>([]);
+  const [currentLessonId, setCurrentLessonId] = useState<string | null>(null);
 
-  const currentLesson = lessons.find(l => l.id === currentLessonId) || lessons[0];
-  const videoSource = { uri: currentLesson.url };
-  
-  // Derived course object to maintain compatibility with existing render code
-  const course = { ...initialCourseData, resources: lessons };
-  
-  // Video State
+  // --- Resource Quiz State ---
+  const [showResourceQuizInstructions, setShowResourceQuizInstructions] = useState(false);
+  const [showResourceQuiz, setShowResourceQuiz] = useState(false);
+  const [showResourceQuizSuccess, setShowResourceQuizSuccess] = useState(false);
+  const [resourceQuizQuestionIndex, setResourceQuizQuestionIndex] = useState(0);
+  const [resourceQuizSelectedOption, setResourceQuizSelectedOption] = useState<number | null>(null);
+  const [activeQuizResource, setActiveQuizResource] = useState<any>(null);
+  const [quizQuestions, setQuizQuestions] = useState<any[]>([]);
+  const [userAnswers, setUserAnswers] = useState<{ [questionId: number]: number }>({});
+  const [rewardedPoints, setRewardedPoints] = useState<number>(0);
+  const [showResourceQuizFailure, setShowResourceQuizFailure] = useState(false);
+  const [quizResult, setQuizResult] = useState<any>(null);
+  const [showInstructions, setShowInstructions] = useState(false);
+  const [showAssessment, setShowAssessment] = useState(false);
+  const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [assessmentAnswers, setAssessmentAnswers] = useState<{ [questionId: string]: number }>({});
+  const [assessmentResult, setAssessmentResult] = useState<any>(null);
+  const [isSubmittingAssessment, setIsSubmittingAssessment] = useState(false);
+  const [assessmentSelectedOption, setAssessmentSelectedOption] = useState<number | null>(null);
+  const [expandedResource, setExpandedResource] = useState<string | null>(null);
+  const [isReviewing, setIsReviewing] = useState(false);
+
+  const allResourcesWatched = useMemo(() => {
+    return lessons.length > 0 && lessons.every(l => l.status === 'completed');
+  }, [lessons]);
+
+  const isCoursePassed = useMemo(() => {
+    const userCourse = getUserCourseById(id?.toString() || "");
+    return !!(assessmentResult?.course_completed || userCourse?.assessment_status?.is_passed);
+  }, [assessmentResult, id, getUserCourseById]);
+
+
+  // --- Resource Tracking ---
+  const { handleVideoProgress, setCurrentResourceId, markAsComplete, setIsPlaying } = useResourceTracking(
+    Number(id),
+    currentLessonId ? Number(currentLessonId) : null,
+    currentUser?.userId?.toString()
+  );
+
+  // Video State - MUST be declared before any conditional returns
   const videoRef = useRef<Video>(null);
   const [status, setStatus] = useState<AVPlaybackStatus>({} as AVPlaybackStatus);
   const [showControls, setShowControls] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showLoader, setShowLoader] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
+  const [isVideoLoading, setIsVideoLoading] = useState(false);
   const [shouldVideoPlay, setShouldVideoPlay] = useState(false);
   const [showCompletionOverlay, setShowCompletionOverlay] = useState(false);
+
+  useEffect(() => {
+    if (currentLessonId) {
+      setCurrentResourceId(Number(currentLessonId));
+    }
+  }, [currentLessonId]);
+
+  // Update local lessons state when course is fetched
+  useEffect(() => {
+    if (fetchedCourse) {
+      console.log('DEBUG: fetchedCourse updated:', JSON.stringify(fetchedCourse, null, 2));
+    }
+    
+    // API now returns course data nested under 'course' key
+    const courseDetail = fetchedCourse?.course || fetchedCourse;
+    const courseResources = courseDetail?.resources || [];
+
+    if (courseResources.length > 0) {
+      // Get user-specific course data to include progress
+      const userCourse = getUserCourseById(id?.toString() || "");
+      const userResources = userCourse?.course?.resources || [];
+
+      // Use resources from course data directly or use local state if needed
+      // To implement sequential locking, we need to know completion status
+      const transformedLessons = courseResources.map((res: any, index: number) => {
+        // Favor progress from userResource if available
+        const userRes = userResources.find((ur: any) => ur.id === res.id);
+        const resourceWithProgress = userRes || res;
+        
+        const isCompleted = resourceWithProgress.progress?.is_completed === 1;
+        const prevCompleted = index === 0 || 
+          (userResources.find((ur: any) => ur.id === courseResources[index - 1].id)?.progress?.is_completed === 1) ||
+          (courseResources[index - 1].progress?.is_completed === 1);
+        
+        return {
+          ...resourceWithProgress,
+          id: res.id.toString(),
+          status: isCompleted ? 'completed' : prevCompleted ? 'not-started' : 'locked',
+        };
+      });
+      setLessons(transformedLessons);
+      
+      // If all lessons are completed, show the completion overlay automatically
+      const allCompleted = transformedLessons.length > 0 && transformedLessons.every((l: any) => l.status === 'completed');
+      
+
+
+      if (allCompleted && !isCoursePassed && !isReviewing) {
+        setShowCompletionOverlay(true);
+      }
+
+      if (transformedLessons.length > 0 && !currentLessonId) {
+        setCurrentLessonId(transformedLessons[0].id);
+      }
+    }
+  }, [fetchedCourse, id, getUserCourseById, assessmentResult]);
+
+  useEffect(() => {
+    if (videoRef.current) {
+        // Ensure loader shows immediately when switching lessons
+        setIsVideoLoading(true);
+    }
+  }, [currentLessonId]);
+
+  // Hide controls after timeout
+  useEffect(() => {
+    if (status.isLoaded && status.isPlaying && showControls) {
+      const timer = setTimeout(() => setShowControls(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [showControls, status]);
+
+  // --- Helper to resolve relative image URIs ---
+  const resolveImageUri = (uri: string | null | undefined) => {
+    if (!uri) return null;
+    if (uri.startsWith('http')) return { uri };
+    
+    // Derive base URL from API URL (e.g., http://localhost:3001/api -> http://localhost:3001/)
+    const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001/api';
+    const baseUrl = apiUrl.replace(/\/api$/, '/');
+    
+    // Ensure we don't have double slashes
+    const cleanUri = uri.startsWith('/') ? uri.substring(1) : uri;
+    return { uri: `${baseUrl}${cleanUri}` };
+  };
+
+  const resolveVideoUri = (uri: string | null | undefined) => {
+    if (!uri) return undefined;
+    if (uri.startsWith('http')) return { uri };
+    
+    // Derive base URL from API URL
+    const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001/api';
+    const baseUrl = apiUrl.replace(/\/api$/, '/');
+    
+    const cleanUri = uri.startsWith('/') ? uri.substring(1) : uri;
+    return { uri: `${baseUrl}${cleanUri}` };
+  };
+
+  const currentLesson = lessons.find(l => l.id === currentLessonId) || lessons[0];
+  const videoSource = React.useMemo(() => resolveVideoUri(currentLesson?.url), [currentLesson?.url]);
   
+  // Derived course object to maintain compatibility with existing render code
+  const course = fetchedCourse ? { 
+    ...fetchedCourse, 
+    ...(fetchedCourse.course || {}),
+    id: fetchedCourse.course?.id || fetchedCourse.id,
+    instructor: fetchedCourse.course?.instructor?.name || fetchedCourse.instructor?.name || "Unknown Instructor",
+    image: resolveImageUri(fetchedCourse.course?.thumbnail || fetchedCourse.thumbnail) || require("../../assets/images/woman.png"),
+    assessments: Array.isArray(fetchedCourse.course?.assessments || fetchedCourse.assessments) 
+      ? (fetchedCourse.course?.assessments || fetchedCourse.assessments) 
+      : ((fetchedCourse.course?.assessments || fetchedCourse.assessments) 
+          ? [fetchedCourse.course?.assessments || fetchedCourse.assessments] 
+          : []),
+    resources: lessons,
+    reviews: (fetchedCourse.course?.reviews || fetchedCourse.reviews)?.map((r: any) => ({
+      id: r.id.toString(),
+      user: r.name || "Anonymous",
+      time: r.review_date || "Recently",
+      comment: r.comment,
+      avatar: resolveImageUri(r.image) || require("../../assets/images/woman.png")
+    })) || []
+  } : null;
+
+
+  console.log('[MODULE-DETAIL] course:', JSON.stringify(course, null, 2) , 'wherss');
+
+  // Debug logging for assessments
+  // console.log('[MODULE-DETAIL] fetchedCourse.assessments:', JSON.stringify(fetchedCourse?.assessments, null, 2));
+  // console.log('[MODULE-DETAIL] course.assessments:', JSON.stringify(course?.assessments, null, 2));
+  // console.log('[MODULE-DETAIL] course.assessments[0]?.questions:', JSON.stringify(course?.assessments?.[0]?.questions, null, 2));
+
+  // Early returns AFTER all hooks
+  if (isLoading) {
+    return (
+      <ThemedView style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </ThemedView>
+    );
+  }
+
+  if (error || !fetchedCourse || !course) {
+    return (
+      <ThemedView style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+        <ThemedText style={{ textAlign: 'center', color: colors.textSecondary }}>
+          {error || "Course not found"}
+        </ThemedText>
+        <Pressable 
+          onPress={() => router.back()}
+          style={[styles.primaryButton, { marginTop: 20, backgroundColor: colors.primary, width: 'auto', paddingHorizontal: 20 }]}
+        >
+          <Text style={{ color: 'white' }}>Go Back</Text>
+        </Pressable>
+      </ThemedView>
+    );
+  }
+
+
   const togglePlayPause = async () => {
     if (!videoRef.current) return;
     
@@ -185,26 +355,21 @@ export default function ModuleDetailScreen() {
     if (status.isLoaded && (status.didJustFinish || (status.positionMillis >= status.durationMillis! - 100))) {
         await videoRef.current.replayAsync();
         setShouldVideoPlay(true);
+        setIsPlaying(true);
         return;
     }
 
     if (status.isLoaded && status.isPlaying) {
         await videoRef.current.pauseAsync();
         setShouldVideoPlay(false);
+        setIsPlaying(false);
     } else {
         await videoRef.current.playAsync();
         setShouldVideoPlay(true);
+        setIsPlaying(true);
     }
   };
 
-  // Ensure video resets to 0 when lesson changes
-  useEffect(() => {
-    if (videoRef.current) {
-        videoRef.current.setPositionAsync(0);
-        // Also ensure it doesn't auto play if we don't want it to
-        // shouldVideoPlay handles that already
-    }
-  }, [currentLessonId]);
 
   const formatTime = (millis: number) => {
     if (!millis) return "0:00";
@@ -242,13 +407,6 @@ export default function ModuleDetailScreen() {
     }
   };
 
-  // Hide controls after timeout
-  useEffect(() => {
-    if (status.isLoaded && status.isPlaying && showControls) {
-      const timer = setTimeout(() => setShowControls(false), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [showControls, status]);
 
   // Handle back with orientation reset
   const handleBack = async () => {
@@ -259,23 +417,6 @@ export default function ModuleDetailScreen() {
         router.back();
       }
   };
-  const [expandedResource, setExpandedResource] = useState<string | null>(null);
-  const [showAssessment, setShowAssessment] = useState(false);
-  const [currentQuestion, setCurrentQuestion] = useState(0);
-  
-  const assessmentQuestions = [
-    {
-      question: "Learn how to make smart money moves! This module teaches you the basics of budgeting, saving,",
-      options: [
-        "Learn how to make smart",
-        "Optimize your workflow with automation features",
-        "Explore the latest design trends for 2023"
-      ]
-    },
-     // Add more questions if needed
-  ];
-
-
   // --- Logic ---
     const updateLessonStatus = (lessonId: string, newStatus: string) => {
         setLessons(prevLessons => prevLessons.map(l => 
@@ -285,9 +426,23 @@ export default function ModuleDetailScreen() {
 
     const handlePlaybackStatusUpdate = async (newStatus: AVPlaybackStatus) => {
         setStatus(newStatus);
-        if (!newStatus.isLoaded) return;
+        if (!newStatus.isLoaded) {
+            if (newStatus.error) {
+                console.error(`Encountered a fatal error during playback: ${newStatus.error}`);
+            }
+            return;
+        }
 
-        if (newStatus.isPlaying && (currentLesson.status === 'not-started' || currentLesson.status === 'current')) {
+        // console.log(`DEBUG: Video playback status updated: ${newStatus.positionMillis} / ${newStatus.durationMillis} (playing: ${newStatus.isPlaying})`);
+
+        setIsBuffering(newStatus.isBuffering);
+        setIsPlaying(newStatus.isPlaying);
+
+        if (newStatus.isPlaying) {
+            handleVideoProgress(newStatus.positionMillis, newStatus.durationMillis || 0);
+        }
+
+        if (newStatus.isPlaying && currentLessonId && (currentLesson.status === 'not-started' || currentLesson.status === 'current')) {
              updateLessonStatus(currentLessonId, 'in-progress');
         }
 
@@ -305,17 +460,30 @@ export default function ModuleDetailScreen() {
             });
             
             if (nextIndex < lessons.length) {
-                 setShowLoader(true);
-                 setShouldVideoPlay(false);
-                 setTimeout(() => {
-                     setCurrentLessonId(lessons[nextIndex].id);
-                     setShowLoader(false);
-                     // Video will allow manual play from beginning
-                 }, 2000);
+                const currentLesson = lessons[currentIndex];
+                if (currentLesson.has_quiz) {
+                    setShouldVideoPlay(false);
+                    setActiveQuizResource(currentLesson);
+                    setShowResourceQuizInstructions(true);
+                } else {
+                    setShowLoader(true);
+                    setShouldVideoPlay(false);
+                    setTimeout(() => {
+                        setCurrentLessonId(lessons[nextIndex].id);
+                        setShowLoader(false);
+                    }, 2000);
+                }
             } else {
                 // Course completed
-                setShouldVideoPlay(false);
-                setShowCompletionOverlay(true);
+                const currentLesson = lessons[currentIndex];
+                if (currentLesson.has_quiz) {
+                    setShouldVideoPlay(false);
+                    setActiveQuizResource(currentLesson);
+                    setShowResourceQuizInstructions(true);
+                } else {
+                    setShouldVideoPlay(false);
+                    setShowCompletionOverlay(true);
+                }
             }
         }
     };
@@ -328,6 +496,11 @@ export default function ModuleDetailScreen() {
              return;
         }
 
+        // Disable module clicking if all resources watched but not reviewing
+        if (allResourcesWatched && !isReviewing) {
+            return;
+        }
+
         setCurrentLessonId(lessonId);
     };
 
@@ -337,18 +510,26 @@ export default function ModuleDetailScreen() {
   //   }
   // };
 
-  const onResourcePress = (resId: string) => {
-    // Check if previous resource watched logic could go here, 
-    // but resources are text based in the example. 
-    // The prompt says "note, when a user is watching on resource of a course, he or she can not click on the next one..."
-    // This implies sequential access on resources too? Or maybe lessons? 
-    // Assuming resources are accessible if previous lesson is done? 
-    // For now, toggle accordion.
+  const onResourcePress = async (resId: string) => {
+    // Check if previous resource watched logic
+    const index = lessons.findIndex(l => l.id === resId);
+    if (index > 0 && lessons[index-1].status !== 'completed') {
+        // Optional: show a toast or alert that it's locked
+        return;
+    }
+
     setExpandedResource(expandedResource === resId ? null : resId);
+    
+    // If it's the current one and not completed, maybe we want to mark it as complete if it's text?
+    // In this UI, 'resources' tab seems to be for non-video files/articles.
   };
 
-  const [showInstructions, setShowInstructions] = useState(false);
-  const [selectedOption, setSelectedOption] = useState<number | null>(null);
+  const handleManualComplete = async (resId: string) => {
+      // Assuming we can mark current resource as complete
+      if (resId === currentLessonId) {
+          await markAsComplete();
+      }
+  };
 
   const handleFinishCourse = () => {
      setShowInstructions(true);
@@ -358,6 +539,367 @@ export default function ModuleDetailScreen() {
       setShowInstructions(false);
       setShowAssessment(true);
   };
+
+  // --- Resource Quiz Handlers ---
+  const handleStartResourceQuiz = async () => {
+    if (!activeQuizResource) return;
+    
+    try {
+      const response = await courseService.getResourceQuiz(activeQuizResource.id);
+      if (response && response.questions) {
+        setQuizQuestions(response.questions);
+        setResourceQuizQuestionIndex(0);
+        setResourceQuizSelectedOption(null);
+        setUserAnswers({});
+        setShowResourceQuizInstructions(false);
+        setShowResourceQuiz(true);
+      } else {
+        console.error('No questions found for this quiz');
+        // If no questions found but triggered, maybe just move on
+        moveToNextResource();
+      }
+    } catch (error) {
+      console.error('Failed to start resource quiz:', error);
+    }
+  };
+
+  const handleSkipResourceQuiz = async () => {
+    if (!activeQuizResource) return;
+    
+    try {
+      await courseService.skipResourceQuiz(activeQuizResource.id);
+      setShowResourceQuizInstructions(false);
+      moveToNextResource();
+    } catch (error) {
+      console.error('Failed to skip resource quiz:', error);
+    }
+  };
+
+  const handleResourceQuizNext = async () => {
+    const currentQuestionData = quizQuestions[resourceQuizQuestionIndex];
+    if (resourceQuizSelectedOption === null || !currentQuestionData) return;
+
+    // Save answer
+    const newUserAnswers = { 
+      ...userAnswers, 
+      [currentQuestionData.id]: resourceQuizSelectedOption 
+    };
+    setUserAnswers(newUserAnswers);
+
+    if (resourceQuizQuestionIndex < quizQuestions.length - 1) {
+      setResourceQuizQuestionIndex(prev => prev + 1);
+      setResourceQuizSelectedOption(null);
+    } else {
+      // Quiz finished - Submit
+      try {
+        const response = await courseService.submitResourceQuiz(activeQuizResource.id, newUserAnswers);
+        console.log('[QUIZ] Submit response:', response);
+        
+        setQuizResult(response);
+        
+        if (response && (response.isPassed || response.passed)) {
+          setRewardedPoints(response.pointsAwarded || response.points_rewarded || 0);
+          setShowResourceQuiz(false);
+          setShowResourceQuizSuccess(true);
+        } else {
+          setShowResourceQuiz(false);
+          setShowResourceQuizFailure(true);
+        }
+      } catch (error) {
+        console.error('Failed to submit resource quiz:', error);
+      }
+    }
+  };
+
+  const handleAssessmentNext = async () => {
+    const activeAssessment = course.assessments?.[0];
+    if (!activeAssessment || !activeAssessment.questions) return;
+    
+    const currentQ = activeAssessment.questions[currentQuestion];
+    if (assessmentSelectedOption === null || !currentQ) return;
+
+    // Save answer
+    const newAnswers = { 
+      ...assessmentAnswers, 
+      [currentQ.id.toString()]: assessmentSelectedOption 
+    };
+    setAssessmentAnswers(newAnswers);
+
+    if (currentQuestion < activeAssessment.questions.length - 1) {
+      setCurrentQuestion(prev => prev + 1);
+      setAssessmentSelectedOption(null);
+    } else {
+      // Assessment finished - Submit
+      await handleAssessmentSubmit(newAnswers);
+    }
+  };
+
+  const handleAssessmentSubmit = async (answers: { [questionId: string]: number }) => {
+    const activeAssessment = course.assessments?.[0];
+    if (!activeAssessment || !authToken) return;
+
+    setIsSubmittingAssessment(true);
+    try {
+      const result = await courseService.submitAssessment(
+        activeAssessment.id,
+        answers,
+        authToken
+      );
+      console.log('[ASSESSMENT] Submit response:', result);
+      setAssessmentResult(result);
+      setShowAssessment(false);
+      
+      if (result.course_completed) {
+        // Refresh course list to update global state
+        if (currentUser?.userId) {
+          // You might want to call refetch from hook or update store directly
+        }
+      }
+    } catch (error) {
+      console.error('Failed to submit assessment:', error);
+      toast.error("Failed to submit assessment. Please try again.");
+    } finally {
+      setIsSubmittingAssessment(false);
+    }
+  };
+
+  const handleRetakeAssessment = () => {
+    setCurrentQuestion(0);
+    setAssessmentSelectedOption(null);
+    setAssessmentAnswers({});
+    setAssessmentResult(null);
+    setShowAssessment(true);
+  };
+
+  const handleRetakeCourse = () => {
+    // Logic to reset course progress could be an API call
+    // For now, reset local state and navigate back or to first lesson
+    setAssessmentResult(null);
+    setIsReviewing(true);
+    setCurrentLessonId(lessons[0].id);
+    if (videoRef.current) {
+      videoRef.current.setPositionAsync(0);
+    }
+  };
+
+  const handleRetakeQuiz = () => {
+    setResourceQuizQuestionIndex(0);
+    setResourceQuizSelectedOption(null);
+    setUserAnswers({});
+    setShowResourceQuizFailure(false);
+    setShowResourceQuiz(true);
+  };
+
+  const handleSkipAfterFailure = async () => {
+    if (!activeQuizResource) return;
+    try {
+      await courseService.skipResourceQuiz(activeQuizResource.id);
+      setShowResourceQuizFailure(false);
+      moveToNextResource();
+    } catch (error) {
+      console.error('Failed to skip resource quiz after failure:', error);
+    }
+  };
+
+  const moveToNextResource = () => {
+    const currentIndex = lessons.findIndex(l => l.id === currentLessonId);
+    const nextIndex = currentIndex + 1;
+    
+    if (nextIndex < lessons.length) {
+      setShowLoader(true);
+      setShouldVideoPlay(false);
+      setTimeout(() => {
+        setCurrentLessonId(lessons[nextIndex].id);
+        setShowLoader(false);
+      }, 2000);
+    } else {
+      setShouldVideoPlay(false);
+      setShowCompletionOverlay(true);
+    }
+  };
+
+  // console.dir(JSON.stringify(, null, 2), "course console");
+
+
+  // --- Assessment Result View ---
+  if (assessmentResult) {
+    const isPassed = assessmentResult.is_passed;
+    const remainingAttempts = assessmentResult.remaining_attempts;
+    
+    return (
+      <ThemedView style={{ flex: 1, padding: 16 }}>
+        <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ padding: 32, backgroundColor: colors.bglight01, borderRadius: 16, width: '100%', alignItems: 'center' }}>
+            <View style={{ 
+              width: 80, height: 80, borderRadius: 40, 
+              backgroundColor: isPassed ? '#E8F5E9' : '#FFEBEE', 
+              justifyContent: 'center', alignItems: 'center', marginBottom: 24 
+            }}>
+              {isPassed ? <CheckCircleIcon color="#34A853" /> : <ThemedText style={{ fontSize: 40 }}>😕</ThemedText>}
+            </View>
+            
+            <ThemedText type="subtitle" style={{ marginBottom: 16, textAlign: 'center', color: isPassed ? '#34A853' : '#D32F2F' }}>
+              {isPassed ? "Assessment Passed!" : "Assessment Failed"}
+            </ThemedText>
+            
+            <ThemedText style={{ textAlign: 'center', color: colors.textSecondary, marginBottom: 8 }}>
+              You scored {assessmentResult.score}/{assessmentResult.total_points} ({assessmentResult.percentage}%).
+            </ThemedText>
+            
+            {!isPassed && (
+              <ThemedText style={{ textAlign: 'center', color: colors.textSecondary, marginBottom: 24 }}>
+                Remaining attempts: <ThemedText style={{ fontWeight: 'bold' }}>{remainingAttempts}</ThemedText>
+              </ThemedText>
+            )}
+
+            <View style={{ gap: 16, width: '100%', marginTop: 16 }}>
+              {isPassed ? (
+                <>
+                  <Pressable 
+                    onPress={() => setAssessmentResult(null)}
+                    style={[styles.primaryButton, { backgroundColor: '#527c65', width: '100%' }]}
+                  >
+                    <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16, textAlign: 'center' }}>Continue</Text>
+                  </Pressable>
+                  
+                  {assessmentResult.certificate_issued && course.has_certificate === 1 && (
+                    <Pressable 
+                      onPress={() => { /* Logic to view certificate */ }}
+                      style={[styles.primaryButton, { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#527c65', width: '100%' }]}
+                    >
+                      <Text style={{ color: '#527c65', fontWeight: 'bold', fontSize: 16, textAlign: 'center' }}>View Certificate</Text>
+                    </Pressable>
+                  )}
+                </>
+              ) : (
+                <>
+                  {remainingAttempts > 0 ? (
+                    <Pressable 
+                      onPress={handleRetakeAssessment}
+                      style={[styles.primaryButton, { backgroundColor: '#527c65', width: '100%' }]}
+                    >
+                      <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16, textAlign: 'center' }}>Retake Assessment</Text>
+                    </Pressable>
+                  ) : (
+                    <Pressable 
+                      onPress={handleRetakeCourse}
+                      style={[styles.primaryButton, { backgroundColor: '#527c65', width: '100%' }]}
+                    >
+                      <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16, textAlign: 'center' }}>Retake Course</Text>
+                    </Pressable>
+                  )}
+                  
+                  <Pressable 
+                    onPress={() => setAssessmentResult(null)}
+                    style={[styles.primaryButton, { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#527c65', width: '100%' }]}
+                  >
+                    <Text style={{ color: '#527c65', fontWeight: 'bold', fontSize: 16, textAlign: 'center' }}>Close</Text>
+                  </Pressable>
+                </>
+              )}
+            </View>
+          </View>
+        </SafeAreaView>
+      </ThemedView>
+    );
+  }
+
+  // --- Assessment Question View ---
+  if (showAssessment) {
+    const activeAssessment = course?.assessments?.[0];
+    const questions = activeAssessment?.questions || [];
+    const currentQ = questions[currentQuestion];
+    
+    if (!currentQ) {
+      console.log("[ASSESSMENT] No question found at index", currentQuestion, "ActiveAssessment:", JSON.stringify(activeAssessment, null, 2));
+      return (
+        <ThemedView style={{ flex: 1, padding: 16 }}>
+          <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <View style={{ padding: 24, backgroundColor: colors.bglight01, borderRadius: 16, width: '100%', alignItems: 'center' }}>
+              <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#FFEBEE', justifyContent: 'center', alignItems: 'center', marginBottom: 24 }}>
+                <ThemedText style={{ fontSize: 40 }}>😕</ThemedText>
+              </View>
+              <ThemedText type="subtitle" style={{ marginBottom: 16, textAlign: 'center' }}>No Questions Found</ThemedText>
+              <ThemedText style={{ textAlign: 'center', color: colors.textSecondary, marginBottom: 24 }}>
+                Sorry, there are no questions available for this assessment yet.
+              </ThemedText>
+              <Pressable 
+                onPress={() => setShowAssessment(false)}
+                style={[styles.primaryButton, { backgroundColor: '#527c65', width: '100%' }]}
+              >
+                <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16, textAlign: 'center' }}>Go Back</Text>
+              </Pressable>
+            </View>
+          </SafeAreaView>
+        </ThemedView>
+      );
+    }
+
+    return (
+      <ThemedView style={{ flex: 1, padding: 16 }}>
+        <SafeAreaView style={{ flex: 1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+            <Pressable onPress={() => setShowAssessment(false)} style={styles.backButton}>
+                 <BackIcon color={colors.text} />
+            </Pressable>
+          </View>
+          
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+             <ThemedText type="subtitle" style={{ fontWeight: 'bold' }}>Course Assessment 📝</ThemedText>
+             <ThemedText style={{ color: colors.textSecondary }}>
+               Question <ThemedText style={{ fontWeight: 'bold', color: '#34A853' }}>{currentQuestion + 1}</ThemedText>/{activeAssessment?.questions.length}
+             </ThemedText>
+          </View>
+          
+          <View style={{ backgroundColor: '#527c65', padding: 20, borderRadius: 12, marginBottom: 20 }}>
+             <ThemedText style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>
+               {currentQ.question_text}
+             </ThemedText>
+          </View>
+          
+          {(currentQ.options || []).map((opt: any, idx: number) => {
+             const optionText = typeof opt === 'string' ? opt : opt.option_text;
+             const optionId = typeof opt === 'string' ? idx : opt.id;
+             
+             return (
+               <Pressable 
+                  key={idx} 
+                  onPress={() => setAssessmentSelectedOption(optionId)}
+                  style={[
+                      styles.optionCard, 
+                      assessmentSelectedOption === optionId && { backgroundColor: '#E8F5E9', borderColor: '#527c65', borderWidth: 1 }
+                  ]}
+               >
+                   <View style={[
+                       styles.optionLetter, 
+                       assessmentSelectedOption === optionId && { backgroundColor: '#527c65' }
+                   ]}>
+                      <Text style={{ color: 'white', fontWeight: 'bold' }}>{String.fromCharCode(97 + idx)}</Text>
+                   </View>
+                   <ThemedText style={{ flex: 1, color: colors.textSecondary }}>{optionText}</ThemedText>
+               </Pressable>
+             );
+          })}
+          
+          <View style={{ flex: 1 }} />
+          
+          <Pressable 
+             onPress={handleAssessmentNext}
+             disabled={assessmentSelectedOption === null || isSubmittingAssessment}
+             style={[styles.primaryButton, { backgroundColor: '#527c65', opacity: (assessmentSelectedOption === null || isSubmittingAssessment) ? 0.6 : 1 }]}
+          >
+             {isSubmittingAssessment ? (
+               <ActivityIndicator color="white" />
+             ) : (
+               <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>
+                  {currentQuestion === questions.length - 1 ? "Submit Assessment" : "Next"}
+               </Text>
+             )}
+          </Pressable>
+        </SafeAreaView>
+      </ThemedView>
+    );
+  }
 
   if (showInstructions) {
       return (
@@ -389,67 +931,97 @@ export default function ModuleDetailScreen() {
       );
   }
 
-  if (showAssessment) {
+  if (showResourceQuizInstructions && activeQuizResource) {
+    return (
+        <ThemedView style={{ flex: 1, padding: 16 }}>
+            <SafeAreaView style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
+                <View style={{padding: 24, backgroundColor: colors.bglight01, borderRadius: 16, width: '100%', alignItems: 'center'}}>
+                    <ThemedText type="subtitle" style={{marginBottom: 16, textAlign: 'center'}}>Resource Quiz</ThemedText>
+                    <ThemedText style={{fontWeight: 'bold', marginBottom: 8, textAlign: 'center'}}>{activeQuizResource.title}</ThemedText>
+                    <ThemedText style={{textAlign: 'center', color: colors.textSecondary, marginBottom: 24}}>
+                        This resource has a quick quiz to test your knowledge. You can take it now or skip to the next lesson.
+                    </ThemedText>
+                    
+                    <View style={{flexDirection: 'row', gap: 16, width: '100%'}}>
+                        <Pressable 
+                            onPress={handleSkipResourceQuiz}
+                            style={[styles.primaryButton, {flex: 1, backgroundColor: 'transparent', borderWidth: 1, borderColor: '#527c65'}]}
+                        >
+                            <Text style={{color: '#527c65', fontWeight: 'bold', fontSize: 16, textAlign: 'center'}}>Skip</Text>
+                        </Pressable>
+                        <Pressable 
+                            onPress={handleStartResourceQuiz}
+                            style={[styles.primaryButton, {flex: 1, backgroundColor: '#527c65'}]}
+                        >
+                            <Text style={{color: 'white', fontWeight: 'bold', fontSize: 16, textAlign: 'center'}}>Start Quiz</Text>
+                        </Pressable>
+                    </View>
+                </View>
+            </SafeAreaView>
+        </ThemedView>
+    );
+  }
+
+  if (showResourceQuiz && activeQuizResource) {
+    const currentQ = quizQuestions[resourceQuizQuestionIndex];
+    if (!currentQ) return null;
+    
     return (
       <ThemedView style={{ flex: 1, padding: 16 }}>
         <SafeAreaView style={{flex: 1}}>
           <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 20}}>
             <Pressable onPress={() => {
-                setShowAssessment(false);
-                setCurrentQuestion(0);
-                setSelectedOption(null);
+                setShowResourceQuiz(false);
+                setActiveQuizResource(null);
             }} style={styles.backButton}>
                  <BackIcon color={colors.text} />
             </Pressable>
           </View>
           
           <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10}}>
-             <ThemedText type="subtitle" style={{fontWeight: 'bold'}}>Assessment 📝</ThemedText>
-             <ThemedText style={{color: colors.textSecondary}}>Questions <ThemedText style={{fontWeight: 'bold', color: '#34A853'}}>{currentQuestion + 1}</ThemedText>/{course.assessment.length}</ThemedText>
+             <ThemedText type="subtitle" style={{fontWeight: 'bold'}}>Resource Quiz 📝</ThemedText>
+             <ThemedText style={{color: colors.textSecondary}}>Question <ThemedText style={{fontWeight: 'bold', color: '#34A853'}}>{resourceQuizQuestionIndex + 1}</ThemedText>/{quizQuestions.length}</ThemedText>
           </View>
           
           <View style={{backgroundColor: '#527c65', padding: 20, borderRadius: 12, marginBottom: 20}}>
              <ThemedText style={{color: 'white', fontWeight: 'bold', fontSize: 16}}>
-               {course.assessment[currentQuestion].question}
+               {currentQ.question_text || currentQ.question}
              </ThemedText>
           </View>
           
-          {course.assessment[currentQuestion].options.map((opt, idx) => (
-             <Pressable 
-                key={idx} 
-                onPress={() => setSelectedOption(idx)}
-                style={[
-                    styles.optionCard, 
-                    selectedOption === idx && { backgroundColor: '#E8F5E9', borderColor: '#527c65', borderWidth: 1 }
-                ]}
-             >
-                 <View style={[
-                     styles.optionLetter, 
-                     selectedOption === idx && { backgroundColor: '#527c65' }
-                 ]}>
-                    <Text style={{color: selectedOption === idx ? 'white' : 'white', fontWeight: 'bold'}}>{String.fromCharCode(97 + idx)}</Text>
-                 </View>
-                 <ThemedText style={{flex: 1, color: colors.textSecondary}}>{opt}</ThemedText>
-             </Pressable>
-          ))}
+          {(currentQ.options || []).map((opt: any, idx: number) => {
+             const optionText = typeof opt === 'string' ? opt : opt.option_text;
+             const optionId = typeof opt === 'string' ? idx : opt.id;
+             
+             return (
+               <Pressable 
+                  key={idx} 
+                  onPress={() => setResourceQuizSelectedOption(optionId)}
+                  style={[
+                      styles.optionCard, 
+                      resourceQuizSelectedOption === optionId && { backgroundColor: '#E8F5E9', borderColor: '#527c65', borderWidth: 1 }
+                  ]}
+               >
+                   <View style={[
+                       styles.optionLetter, 
+                       resourceQuizSelectedOption === optionId && { backgroundColor: '#527c65' }
+                   ]}>
+                      <Text style={{color: 'white', fontWeight: 'bold'}}>{String.fromCharCode(97 + idx)}</Text>
+                   </View>
+                   <ThemedText style={{flex: 1, color: colors.textSecondary}}>{optionText}</ThemedText>
+               </Pressable>
+             );
+          })}
           
           <View style={{flex: 1}} />
           
           <Pressable 
-             onPress={() => {
-                if (currentQuestion < course.assessment.length - 1) {
-                    setCurrentQuestion(prev => prev + 1);
-                    setSelectedOption(null);
-                } else {
-                    setShowAssessment(false);
-                    setCurrentQuestion(0);
-                    setSelectedOption(null);
-                }
-             }}
-             style={[styles.primaryButton, {backgroundColor: '#527c65'}]}
+             onPress={handleResourceQuizNext}
+             disabled={resourceQuizSelectedOption === null}
+             style={[styles.primaryButton, {backgroundColor: '#527c65', opacity: resourceQuizSelectedOption === null ? 0.6 : 1}]}
           >
              <Text style={{color: 'white', fontWeight: 'bold', fontSize: 16}}>
-                {currentQuestion === course.assessment.length - 1 ? "Finish" : "Next"}
+                {resourceQuizQuestionIndex === quizQuestions.length - 1 ? "Finish" : "Next"}
              </Text>
           </Pressable>
         </SafeAreaView>
@@ -457,86 +1029,228 @@ export default function ModuleDetailScreen() {
     );
   }
 
+  if (showResourceQuizSuccess) {
+    return (
+        <ThemedView style={{ flex: 1, padding: 16 }}>
+            <SafeAreaView style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
+                <View style={{padding: 32, backgroundColor: colors.bglight01, borderRadius: 16, width: '100%', alignItems: 'center'}}>
+                    <View style={{width: 80, height: 80, borderRadius: 40, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center', marginBottom: 24}}>
+                        <CheckCircleIcon color="#34A853" />
+                    </View>
+                    <ThemedText type="subtitle" style={{marginBottom: 16, textAlign: 'center'}}>
+                      {quizResult?.message || "Quiz Passed!"}
+                    </ThemedText>
+                    <ThemedText style={{textAlign: 'center', color: colors.textSecondary, marginBottom: 16}}>
+                        Great job! You scored {quizResult?.score}/{quizResult?.total}.
+                    </ThemedText>
+                    
+                    {rewardedPoints > 0 && (
+                      <View style={{backgroundColor: '#E8F5E9', padding: 16, borderRadius: 12, marginBottom: 20, alignItems: 'center', width: '100%'}}>
+                        <ThemedText style={{color: '#34A853', fontWeight: 'bold', fontSize: 18}}>+{rewardedPoints} Points Awarded!</ThemedText>
+                        <ThemedText style={{color: '#527c65', fontSize: 12}}>Successfully Added to your account</ThemedText>
+                      </View>
+                    )}
+
+                    {quizResult?.newTotal && (
+                      <View style={{ marginBottom: 32, alignItems: 'center' }}>
+                         <ThemedText style={{ color: colors.textSecondary, fontSize: 14 }}>
+                           New Balance: <ThemedText style={{ fontWeight: 'bold' }}>{quizResult.newTotal} pts</ThemedText>
+                         </ThemedText>
+                         {quizResult.newLevel && (
+                           <ThemedText style={{ color: '#527c65', fontWeight: 'bold', fontSize: 16, marginTop: 4 }}>
+                             Level Up: {quizResult.newLevel}
+                           </ThemedText>
+                         )}
+                      </View>
+                    )}
+                    
+                    <Pressable 
+                        onPress={() => {
+                            setShowResourceQuizSuccess(false);
+                            moveToNextResource();
+                        }}
+                        style={[styles.primaryButton, {backgroundColor: '#527c65', width: '100%'}]}
+                    >
+                        <Text style={{color: 'white', fontWeight: 'bold', fontSize: 16, textAlign: 'center'}}>Continue</Text>
+                    </Pressable>
+                </View>
+            </SafeAreaView>
+        </ThemedView>
+    );
+  }
+
+  if (showResourceQuizFailure) {
+    return (
+        <ThemedView style={{ flex: 1, padding: 16 }}>
+            <SafeAreaView style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
+                <View style={{padding: 32, backgroundColor: colors.bglight01, borderRadius: 16, width: '100%', alignItems: 'center'}}>
+                    <View style={{width: 80, height: 80, borderRadius: 40, backgroundColor: '#FFEBEE', justifyContent: 'center', alignItems: 'center', marginBottom: 24}}>
+                        <ThemedText style={{fontSize: 40}}>😕</ThemedText>
+                    </View>
+                    <ThemedText type="subtitle" style={{marginBottom: 16, textAlign: 'center', color: '#D32F2F'}}>
+                      {quizResult?.message || "Quiz Not Passed"}
+                    </ThemedText>
+                    <ThemedText style={{textAlign: 'center', color: colors.textSecondary, marginBottom: 32}}>
+                        You scored {quizResult?.score}/{quizResult?.total}. Try again to earn points or skip to continue.
+                    </ThemedText>
+                    
+                    <View style={{ gap: 16, width: '100%' }}>
+                        <Pressable 
+                            onPress={handleRetakeQuiz}
+                            style={[styles.primaryButton, {backgroundColor: '#527c65', width: '100%'}]}
+                        >
+                            <Text style={{color: 'white', fontWeight: 'bold', fontSize: 16, textAlign: 'center'}}>Take Quiz Again</Text>
+                        </Pressable>
+
+                        <Pressable 
+                            onPress={handleSkipAfterFailure}
+                            style={[styles.primaryButton, {backgroundColor: 'transparent', borderWidth: 1, borderColor: '#527c65', width: '100%'}]}
+                        >
+                            <Text style={{color: '#527c65', fontWeight: 'bold', fontSize: 16, textAlign: 'center'}}>Skip Quiz</Text>
+                        </Pressable>
+                    </View>
+                </View>
+            </SafeAreaView>
+        </ThemedView>
+    );
+  }
+
   return (
     <ThemedView style={{ flex: 1 }}>
-      {/* Custom Header Area (Video Player) */}
-      <Pressable onPress={() => setShowControls(!showControls)} style={[{ backgroundColor: 'black', position: 'relative' }, isFullscreen ? { width: '100%', height: '100%', position: 'absolute', zIndex: 999 } : { height: 300 }]}>
-        <Video
-          ref={videoRef}
-          style={{ width: '100%', height: '100%' }}
-          source={videoSource}
-          useNativeControls={false}
-          resizeMode={ResizeMode.CONTAIN}
-          shouldPlay={shouldVideoPlay}
-          onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-        />
-
-        {showLoader && (
-            <View style={styles.loaderContainer}>
-                <ThemedText style={{color: 'white', fontWeight: 'bold'}}>Loading video...</ThemedText>
+      {/* Custom Header Area (Video Player or Passed State) */}
+      <Pressable onPress={() => (!isCoursePassed || isReviewing) && setShowControls(!showControls)} style={[{ backgroundColor: 'black', position: 'relative' }, isFullscreen ? { width: '100%', height: '100%', position: 'absolute', zIndex: 999 } : { height: 300 }]}>
+        {isCoursePassed && !isReviewing ? (
+          <View style={[StyleSheet.absoluteFillObject, { justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: '#1A1A1A' }]}>
+            <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: '#34A85322', justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
+              <CheckCircleIcon color="#34A853" />
             </View>
-        )}
-        
-        {/* Controls Overlay */}
-        {showControls && (
-            <View style={StyleSheet.absoluteFillObject}>
-                {/* Top Bar: Back Button */}
-                 <SafeAreaView style={styles.videoHeader}>
-                    <Pressable onPress={handleBack} style={styles.videoBackButton}>
-                        <BackIcon color="white" />
-                    </Pressable>
-                </SafeAreaView>
-
-                {/* Center Controls: Play/Pause */}
-                <View style={styles.playControls}>
-                    {/* Backward 15s */}
-                     <Pressable style={styles.controlBtn} onPress={() => {
-                         if (videoRef.current && status.isLoaded) {
-                            videoRef.current.setPositionAsync(Math.max(0, status.positionMillis - 15000));
-                         }
-                     }}>
-                        <RotateLeftIcon color="white" />
-                        <Text style={{color: 'white', fontSize: 10, marginTop: 10}}>-15s</Text>
-                     </Pressable>
-
-                    <Pressable onPress={togglePlayPause} style={styles.playBtn}>
-                        {status.isLoaded && status.isPlaying ? (
-                            <PauseIcon color="white" />
-                        ) : (status.isLoaded && status.didJustFinish) ? (
-                            <ReplayIcon color="white" />
-                        ) : (
-                            <PlayIcon color="white" />
-                        )}
-                    </Pressable>
-
-                     {/* Forward Button REMOVED as per request */}
-                    {/* <Pressable style={styles.controlBtn}> ... </Pressable> */}
-                </View>
-
-                {/* Bottom Bar: Slider and Maximize */}
-                <View style={styles.videoFooter}>
-                    <Text style={{color: 'white', fontSize: 12}}>
-                        {status.isLoaded ? formatTime(status.positionMillis) : "0:00"}
-                    </Text>
-                    <Slider
-                        style={{flex: 1, height: 40}}
-                        minimumValue={0}
-                        maximumValue={status.isLoaded ? status.durationMillis : 1}
-                        value={status.isLoaded ? status.positionMillis : 0}
-                        onSlidingComplete={handleSeek}
-                        minimumTrackTintColor="#FFFFFF"
-                        maximumTrackTintColor="#rgba(255, 255, 255, 0.5)"
-                        thumbTintColor="#FFFFFF"
-                    />
-                     <Text style={{color: 'white', fontSize: 12}}>
-                        {status.isLoaded ? formatTime(status.durationMillis || 0) : "0:00"}
-                    </Text>
-                    
-                    <Pressable onPress={handleFullscreenToggle} style={{padding: 8}}>
-                        {isFullscreen ? <NavigateMinimizeIcon color="white" /> : <NavigateFullscreenIcon color="white" />}
-                    </Pressable>
-                </View>
+            <Text style={{ color: 'white', fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 8 }}>
+              Module Completed!
+            </Text>
+            <Text style={{ color: '#ccc', fontSize: 14, textAlign: 'center', marginBottom: 20 }}>
+              Congratulations! You have successfully passed this module and earned your points.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <Pressable 
+                onPress={() => {
+                  setIsReviewing(true);
+                  setCurrentLessonId(lessons[0].id);
+                }}
+                style={[styles.primaryButton, { paddingHorizontal: 20, paddingVertical: 12, backgroundColor: 'transparent', borderWidth: 1, borderColor: 'white' }]}
+              >
+                <Text style={{ color: 'white', fontWeight: 'bold' }}>Rewatch Videos</Text>
+              </Pressable>
+              {course.has_certificate === 1 && (
+                <Pressable 
+                  onPress={() => { /* Logic to view certificate */ }}
+                  style={[styles.primaryButton, { paddingHorizontal: 20, paddingVertical: 12 }]}
+                >
+                  <Text style={{ color: 'white', fontWeight: 'bold' }}>View Certificate</Text>
+                </Pressable>
+              )}
             </View>
+          </View>
+        ) : (
+          <>
+            <Video
+              ref={videoRef}
+              style={{ width: '100%', height: '100%' }}
+              source={videoSource}
+              useNativeControls={false}
+              resizeMode={ResizeMode.CONTAIN}
+              shouldPlay={shouldVideoPlay}
+              onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
+              onLoadStart={() => setIsVideoLoading(true)}
+              onLoad={(status) => {
+                  setIsVideoLoading(false);
+                  if (status.isLoaded && videoRef.current) {
+                      // Get the most up-to-date progress from the store
+                      const userCourse = getUserCourseById(id?.toString() || "");
+                      const userRes = userCourse?.course.resources.find((ur: any) => ur.id.toString() === currentLessonId);
+                      
+                      const savedProgress = userRes?.progress?.watched_duration || currentLesson?.progress?.watched_duration;
+                      const lastPosition = savedProgress ? Number(savedProgress) * 1000 : 0;
+                      
+                      // console.log(`DEBUG: Video loaded. Seeking to saved position: ${lastPosition}ms (watched_duration: ${savedProgress}s)`);
+                      videoRef.current.setPositionAsync(lastPosition);
+                  }
+              }}
+              usePoster={true}
+              posterSource={course.image}
+              posterStyle={{ width: '100%', height: '100%', resizeMode: 'cover' }}
+            />
+
+            {(showLoader || isBuffering || isVideoLoading) && (
+                <View style={[styles.loaderContainer, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+                    <ActivityIndicator size="large" color="white" />
+                    <ThemedText style={{color: 'white', fontWeight: 'bold', marginTop: 10}}>
+                        {isVideoLoading ? "Loading video..." : isBuffering ? "Buffering..." : "Loading..."}
+                    </ThemedText>
+                </View>
+            )}
+            
+            {/* Controls Overlay */}
+            {showControls && (
+                <View style={StyleSheet.absoluteFillObject}>
+                    {/* Top Bar: Back Button */}
+                     <SafeAreaView style={styles.videoHeader}>
+                        <Pressable onPress={handleBack} style={styles.videoBackButton}>
+                            <BackIcon color="white" />
+                        </Pressable>
+                    </SafeAreaView>
+
+                    {/* Center Controls: Play/Pause */}
+                    <View style={styles.playControls}>
+                        {/* Backward 15s */}
+                         <Pressable style={styles.controlBtn} onPress={() => {
+                             if (videoRef.current && status.isLoaded) {
+                                videoRef.current.setPositionAsync(Math.max(0, status.positionMillis - 15000));
+                             }
+                         }}>
+                            <RotateLeftIcon color="white" />
+                            <Text style={{color: 'white', fontSize: 10, marginTop: 10}}>-15s</Text>
+                         </Pressable>
+
+                        <Pressable onPress={togglePlayPause} style={styles.playBtn}>
+                            {status.isLoaded && status.isPlaying ? (
+                                <PauseIcon color="white" />
+                            ) : (status.isLoaded && status.didJustFinish) ? (
+                                <ReplayIcon color="white" />
+                            ) : (
+                                <PlayIcon color="white" />
+                            )}
+                        </Pressable>
+
+                         {/* Forward Button REMOVED as per request */}
+                        {/* <Pressable style={styles.controlBtn}> ... </Pressable> */}
+                    </View>
+
+                    {/* Bottom Bar: Slider and Maximize */}
+                    <View style={styles.videoFooter}>
+                        <Text style={{color: 'white', fontSize: 12}}>
+                            {status.isLoaded ? formatTime(status.positionMillis) : "0:00"}
+                        </Text>
+                        <Slider
+                            style={{flex: 1, height: 40}}
+                            minimumValue={0}
+                            maximumValue={status.isLoaded ? status.durationMillis : 1}
+                            value={status.isLoaded ? status.positionMillis : 0}
+                            onSlidingComplete={handleSeek}
+                            minimumTrackTintColor="#FFFFFF"
+                            maximumTrackTintColor="#rgba(255, 255, 255, 0.5)"
+                            thumbTintColor="#FFFFFF"
+                        />
+                         <Text style={{color: 'white', fontSize: 12}}>
+                            {status.isLoaded ? formatTime(status.durationMillis || 0) : "0:00"}
+                        </Text>
+                        
+                        <Pressable onPress={handleFullscreenToggle} style={{padding: 8}}>
+                            {isFullscreen ? <NavigateMinimizeIcon color="white" /> : <NavigateFullscreenIcon color="white" />}
+                        </Pressable>
+                    </View>
+                </View>
+            )}
+          </>
         )}
 
         {/* Completion Overlay */}
@@ -564,6 +1278,7 @@ export default function ModuleDetailScreen() {
                         <Pressable 
                             onPress={() => {
                                 setShowCompletionOverlay(false);
+                                setIsReviewing(true);
                                 setCurrentLessonId(lessons[0].id);
                                 if (videoRef.current) {
                                     videoRef.current.setPositionAsync(0);
@@ -579,6 +1294,42 @@ export default function ModuleDetailScreen() {
         )}
       </Pressable>
       
+      {/* Instruction Modal for First-time Enrollment */}
+      <Modal
+        visible={showEnrolledModal}
+        transparent
+        animationType="fade"
+      >
+        <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
+                <View style={styles.instructionIconContainer}>
+                    <Svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={colors.primary} strokeWidth="2">
+                        <Path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
+                        <Path d="M12 16v-4" />
+                        <Path d="M12 8h.01" />
+                    </Svg>
+                </View>
+                <ThemedText type="subtitle" style={styles.modalTitle}>Welcome to the Module!</ThemedText>
+                <ThemedText style={styles.modalDescription}>
+                    We're excited to have you here! Here are some tips to get started:
+                    {"\n\n"}
+                    • Watch the videos in sequence to unlock lessons.
+                    {"\n"}
+                    • You cannot skip forward on videos you haven't watched.
+                    {"\n"}
+                    • Complete the assessment at the end to earn your points.
+                </ThemedText>
+                
+                <Pressable 
+                    onPress={() => setShowEnrolledModal(false)}
+                    style={[styles.instructionButton, { backgroundColor: colors.primary }]}
+                >
+                    <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>Continue</Text>
+                </Pressable>
+            </View>
+        </View>
+      </Modal>
+
       {!isFullscreen && (
         <ScrollView style={{ flex: 1 }}>
         <View style={{ padding: 16 }}>
@@ -598,9 +1349,12 @@ export default function ModuleDetailScreen() {
                   </View>
                   <ThemedText style={{fontWeight: '600'}}>{course.instructor}</ThemedText>
                </View>
-               <Pressable style={styles.messageBtn}>
-                   <Text style={{color: 'white', cursor: 'pointer'}}>Chat</Text>
-               </Pressable>
+                <Pressable 
+                  onPress={() => router.push(`/course-chat/${id}`)}
+                  style={styles.messageBtn}
+                >
+                    <Text style={{color: 'white', cursor: 'pointer'}}>Chat</Text>
+                </Pressable>
            </View>
            
            <View style={styles.statsRow}>
@@ -691,9 +1445,10 @@ export default function ModuleDetailScreen() {
                            style={[
                                styles.lessonRow, 
                                currentLessonId === lesson.id ? {backgroundColor: colors.bglight10} : { backgroundColor: 'transparent' },
-                               lesson.status === 'locked' && { opacity: 0.5 }
+                               lesson.status === 'locked' && { opacity: 0.5 },
+                               (allResourcesWatched && !isReviewing) && { opacity: 0.6 }
                            ]}
-                           disabled={lesson.status === 'locked' || (currentLesson.status === 'in-progress' && lesson.id !== currentLessonId)}
+                           disabled={lesson.status === 'locked' || (currentLesson.status === 'in-progress' && lesson.id !== currentLessonId) || (allResourcesWatched && !isReviewing)}
                          >
                             <ThemedText type="title" style={{fontSize: 24, marginRight: 16, width: 20}}>
                                 {
@@ -752,7 +1507,7 @@ export default function ModuleDetailScreen() {
            {activeTab === 'resources' && (
                <View>
                     <Text style={{color: colors.textSecondary, fontSize: 12, marginBottom: 10}}>Section 1 | Intro to Financial Literacy</Text>
-                   {course.resources.map((res, idx) => (
+                   {course.resources.map((res: any, idx: number) => (
                        <View key={res.id} style={{marginBottom: 0, backgroundColor: expandedResource === res.id ? colors.bglight01 : 'transparent', borderRadius: 8}}>
                            <Pressable 
                               onPress={() => onResourcePress(res.id)}
@@ -783,7 +1538,7 @@ export default function ModuleDetailScreen() {
 
            {activeTab === 'reviews' && (
                <View>
-                   {course.reviews.map((review) => (
+                   {course.reviews.map((review: any) => (
                        <View key={review.id} style={{marginBottom: 20, flexDirection: 'column', gap: 12}}>
                           <View className="flex flex-row items-center gap-3">
                            <View style={{width: 40, height: 40, borderRadius: '100%', backgroundColor: '#ddd'}} className="overflow-hidden">
@@ -843,11 +1598,57 @@ const styles = StyleSheet.create({
       justifyContent: 'center',
   },
   loaderContainer: {
-      ...StyleSheet.absoluteFillObject,
-      justifyContent: 'center',
-      alignItems: 'center',
-      backgroundColor: 'rgba(0,0,0,0.8)',
-      zIndex: 20,
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    width: '100%',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  instructionIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#5A7C651A',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  modalDescription: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 28,
+  },
+  instructionButton: {
+    width: '100%',
+    height: 52,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   playBtn: {
       width: 40,

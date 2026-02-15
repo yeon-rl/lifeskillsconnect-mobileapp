@@ -1,28 +1,66 @@
 import { useTheme } from '@/context/ThemeContext';
 import { useThemedColors } from '@/hooks/use-themed-colors';
+import { userService } from '@/services/api/apiServices';
+import { useUserStore } from '@/store';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 export default function ResetPassword() {
   const colors = useThemedColors();
   const router = useRouter();
   const { themeMode } = useTheme();
 
+  const [activeTab, setActiveTab] = useState<'email' | 'phone'>('email');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const { currentUser } = useUserStore();
+  
+  useEffect(() => {
+    if (currentUser) {
+      if (currentUser.email) setEmail(currentUser.email);
+      if (currentUser.phone) {
+          setPhone(currentUser.phone);
+          // If phone exists but email doesn't, switch to phone tab
+          if (!currentUser.email) setActiveTab('phone');
+      }
+    }
+  }, [currentUser]);
 
   const handleBack = () => {
     router.back();
   };
 
-  const handleVerify = () => {
-    // In a real app, you would validate and send OTP here
-    if (email) {
-        router.push({
-            pathname: '/otp-verification',
-            params: { email: email }
-        });
+  const handleVerify = async () => {
+    if (activeTab === 'email' && !email) {
+      Alert.alert('Error', 'Please enter your email');
+      return;
+    }
+    if (activeTab === 'phone' && !phone) {
+      Alert.alert('Error', 'Please enter your phone number');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const data = activeTab === 'email' ? { email } : { phone };
+      await userService.requestPasswordOTP(data);
+      
+      router.push({
+        pathname: '/otp-verification',
+        params: { 
+          email: activeTab === 'email' ? email : undefined,
+          phone: activeTab === 'phone' ? phone : undefined
+        }
+      });
+    } catch (error: any) {
+      const message = error?.response?.data?.message || 'Failed to request OTP. Please try again.';
+      Alert.alert('Error', message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -51,27 +89,73 @@ export default function ResetPassword() {
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Let’s help you recover your password.</Text>
         </View>
 
-        {/* Email */}
-        <View style={styles.inputGroup}>
-          <Text style={[styles.label, { color: colors.text }]}>Email</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: themeMode === 'dark' ? colors.inputBg : '#F9FAFB', color: colors.text }]}
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            placeholder="Enter Email"
-            placeholderTextColor={colors.gray300}
-            autoCapitalize="none"
-          />
+        {/* Tabs */}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity 
+            style={[styles.tab, activeTab === 'email' && { borderBottomColor: '#526D65', borderBottomWidth: 2 }]} 
+            onPress={() => setActiveTab('email')}
+          >
+            <Text style={[styles.tabText, { color: activeTab === 'email' ? '#526D65' : colors.textSecondary }]}>Email</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.tab, activeTab === 'phone' && { borderBottomColor: '#526D65', borderBottomWidth: 2 }]} 
+            onPress={() => setActiveTab('phone')}
+          >
+            <Text style={[styles.tabText, { color: activeTab === 'phone' ? '#526D65' : colors.textSecondary }]}>Phone Number</Text>
+          </TouchableOpacity>
         </View>
 
-
+        {/* Input */}
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: colors.text }]}>{activeTab === 'email' ? 'Email' : 'Phone Number'}</Text>
+          {activeTab === 'email' ? (
+            <TextInput
+              style={[
+                styles.input, 
+                { 
+                    backgroundColor: themeMode === 'dark' ? colors.inputBg : '#F9FAFB', 
+                    color: colors.text,
+                    opacity: currentUser?.email ? 0.6 : 1
+                }
+              ]}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              placeholder="Enter Email"
+              placeholderTextColor={colors.gray300}
+              autoCapitalize="none"
+              editable={!currentUser?.email}
+            />
+          ) : (
+            <TextInput
+              style={[
+                styles.input, 
+                { 
+                    backgroundColor: themeMode === 'dark' ? colors.inputBg : '#F9FAFB', 
+                    color: colors.text,
+                    opacity: currentUser?.phone ? 0.6 : 1
+                }
+              ]}
+              value={phone}
+              onChangeText={setPhone}
+              keyboardType="phone-pad"
+              placeholder="Enter Phone Number"
+              placeholderTextColor={colors.gray300}
+              editable={!currentUser?.phone}
+            />
+          )}
+        </View>
 
         <TouchableOpacity 
-            style={[styles.verifyButton, { backgroundColor: '#526D65' }]} // Matching the button color from image
+            style={[styles.verifyButton, { backgroundColor: '#526D65' }, loading && { opacity: 0.7 }]} 
             onPress={handleVerify}
+            disabled={loading}
         >
-            <Text style={styles.verifyButtonText}>Verify</Text>
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.verifyButtonText}>Verify</Text>
+            )}
         </TouchableOpacity>
 
       </ScrollView>
@@ -99,6 +183,20 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    marginBottom: 25,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  tab: {
+    paddingVertical: 10,
+    marginRight: 20,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   titleContainer: {
       marginBottom: 30,

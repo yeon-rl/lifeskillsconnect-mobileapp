@@ -30,8 +30,11 @@ apiClient.interceptors.request.use(
       config.headers.Authorization = `Bearer ${authToken}`;
     }
     
-    // Start global loading
-    useUiStore.getState().setIsLoading(true);
+    // Start global loading only if not explicitly skipped
+    // @ts-ignore - custom config property
+    if (!config.skipGlobalLoader) {
+      useUiStore.getState().setIsLoading(true);
+    }
 
     return config;
   },
@@ -43,8 +46,11 @@ apiClient.interceptors.request.use(
 // Response Interceptor: Handle global errors
 apiClient.interceptors.response.use(
   (response) => {
-    // Stop global loading on success
-    useUiStore.getState().setIsLoading(false);
+    // Stop global loading on success only if it was started
+    // @ts-ignore - custom config property
+    if (!response.config.skipGlobalLoader) {
+      useUiStore.getState().setIsLoading(false);
+    }
     
     // Log successful response for debugging
     console.log(`API Response [${response.config.method?.toUpperCase()}] ${response.config.url}:`, response.data);
@@ -52,8 +58,11 @@ apiClient.interceptors.response.use(
     return response;
   },
   (error) => {
-    // Stop global loading on error
-    useUiStore.getState().setIsLoading(false);
+    // Stop global loading on error only if it was started
+    // @ts-ignore - custom config property
+    if (!error.config?.skipGlobalLoader) {
+      useUiStore.getState().setIsLoading(false);
+    }
 
     if (error.response) {
       // The request was made and the server responded with a status code
@@ -61,7 +70,7 @@ apiClient.interceptors.response.use(
       const errorMessage = error.response.data?.message || error.response.data?.error || 'An error occurred';
       
       // ONLY show toast for specific auth errors as requested
-      const authErrorMessages = ['invalid email or password', 'invalid credentials', 'user not found'];
+      const authErrorMessages = ['invalid email or password', 'invalid credentials', 'user not found', 'already subscribed', 'subscription failed'];
       if (authErrorMessages.some(msg => errorMessage.toLowerCase().includes(msg))) {
         toast.error(errorMessage);
       }

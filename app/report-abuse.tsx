@@ -1,4 +1,6 @@
 import { useThemedColors } from '@/hooks/use-themed-colors';
+import { reportService } from '@/services/api/apiServices';
+import { useUserStore } from '@/store/userStore';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
@@ -16,6 +18,7 @@ import {
   View
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { toast } from 'sonner-native';
 
 interface FormFieldProps {
   label: string;
@@ -125,6 +128,7 @@ export default function ReportAbuse() {
   const [contactOnlyNecessary, setContactOnlyNecessary] = useState(true);
   const [evidence, setEvidence] = useState<string | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [selectionModal, setSelectionModal] = useState<{
     visible: boolean;
@@ -139,20 +143,27 @@ export default function ReportAbuse() {
   });
 
   const reportTypeOptions = [
-    'Harassment',
-    'Bullying',
-    'Hate Speech',
-    'Inappropriate Content',
-    'Self-Harm',
-    'Other'
+    'Physical Abuse',
+    'Emotional/Verbal Abuse',
+    'Sexual Abuse',
+    'Neglect',
+    'Financial Abuse',
+    'Psychological Abuse',
+    'Cyberbullying/Online Harassment',
+    'Other',
   ];
 
   const whoReportingOptions = [
-    'Student',
-    'Mentor',
-    'Staff',
-    'Group',
-    'Other'
+    'father',
+    'mother',
+    'sibling',
+    'partner/spouse',
+    'friend',
+    'acquaintance',
+    'stranger',
+    'caregiver',
+    'authority figure (e.g., teacher, coach)',
+    'other',
   ];
 
   const openSelection = (type: 'reportType' | 'whoReporting') => {
@@ -207,10 +218,103 @@ export default function ReportAbuse() {
     setShowConfirmModal(true);
   };
 
-  const confirmSend = () => {
-    setShowConfirmModal(false);
-    Alert.alert("Success", "Your report has been submitted confidentially.");
-    router.back();
+  const confirmSend = async () => {
+    if (!reportType || reportType === 'None') {
+      toast.error('Please select a report type');
+      return;
+    }
+    if (!whoReporting || whoReporting === 'None') {
+      toast.error('Please select who you are reporting');
+      return;
+    }
+    if (!whatReporting.trim()) {
+      toast.error('Please describe what you are reporting');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setShowConfirmModal(false);
+      
+      const toastId = toast.loading('Preparing report...');
+      
+      let uploadedImageUrl = null;
+      
+      // Upload evidence to Cloudinary if available
+      if (evidence) {
+        toast.loading('Uploading evidence...', { id: toastId });
+        const formData = new FormData();
+        // @ts-ignore
+        formData.append('file', {
+          uri: evidence,
+          type: 'image/jpeg',
+          name: 'evidence.jpg',
+        });
+        formData.append('upload_preset', process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET || '');
+        
+        try {
+          const cloudinaryResponse = await fetch(
+            `https://api.cloudinary.com/v1_1/${process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
+            {
+              method: 'POST',
+              body: formData,
+              headers: {
+                'Content-Type': 'multipart/form-data',
+              },
+            }
+          );
+
+          if (!cloudinaryResponse.ok) {
+            console.error('Cloudinary upload failed:', await cloudinaryResponse.text());
+            throw new Error('Failed to upload image to Cloudinary');
+          }
+
+          const cloudinaryData = await cloudinaryResponse.json();
+          uploadedImageUrl = cloudinaryData.secure_url;
+        } catch (uploadError) {
+          console.error('Error uploading file to Cloudinary:', uploadError);
+          toast.error('Failed to upload evidence image', { id: toastId });
+          // Optionally wait a bit so user sees error
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          toast.loading('Continuing report submission...', { id: toastId });
+        }
+      }
+
+      toast.loading('Submitting report...', { id: toastId });
+      const { authToken } = useUserStore.getState();
+      
+      const payload = {
+        reported_entity: whoReporting,
+        report_type: reportType,
+        report_subject: whatReporting.split('\n')[0].substring(0, 100),
+        description: whatReporting,
+        evidence: uploadedImageUrl ? [uploadedImageUrl] : [],
+        contact_preference: (contactOnlyNecessary ? 'Only if necessary' : 'None') as any,
+        additional_details: additionalDetails || contactPreference,
+        keep_me_updated: keepUpdated,
+      };
+
+      await reportService.reportAbuse(payload, authToken || undefined);
+      
+      toast.success('Your report has been submitted confidentially.', { id: toastId });
+      
+      // Reset form fields instead of navigating back
+      setReportType('None');
+      setWhoReporting('None');
+      setWhatReporting('');
+      setAdditionalDetails('');
+      setContactPreference('');
+      setKeepUpdated(true);
+      setContactOnlyNecessary(true);
+      setEvidence(null);
+
+    } catch (error: any) {
+      console.error('Submission error:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to submit report. Please try again.';
+      toast.error(errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -316,8 +420,12 @@ export default function ReportAbuse() {
           />
         </View>
 
-        <TouchableOpacity style={styles.sendButton} onPress={handleSendReport}>
-          <Text style={styles.sendButtonText}>Send Report</Text>
+        <TouchableOpacity 
+          style={[styles.sendButton, isSubmitting && { opacity: 0.7 }]} 
+          onPress={handleSendReport}
+          disabled={isSubmitting}
+        >
+          <Text style={styles.sendButtonText}>{isSubmitting ? 'Sending...' : 'Send Report'}</Text>
         </TouchableOpacity>
       </ScrollView>
 

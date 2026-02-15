@@ -1,34 +1,65 @@
 import { useTheme } from '@/context/ThemeContext';
 import { useThemedColors } from '@/hooks/use-themed-colors';
+import { userService } from '@/services/api/apiServices';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 export default function OtpVerification() {
   const colors = useThemedColors();
   const router = useRouter();
   const { themeMode } = useTheme();
-  // We can get email from params if we want to display it
-  const { email } = useLocalSearchParams(); 
+  // We can get email and phone from params
+  const { email, phone } = useLocalSearchParams(); 
 
   const [otp, setOtp] = useState(['', '', '', '']);
+  const [loading, setLoading] = useState(false);
   const inputRefs = useRef<Array<TextInput | null>>([]);
 
   const handleBack = () => {
     router.back();
   };
 
-  const handleNext = () => {
-    // Validate OTP here
-    if (otp.join('').length === 4) {
-        router.push('/create-new-password');
+  const handleNext = async () => {
+    const otpString = otp.join('');
+    if (otpString.length !== 4) {
+      Alert.alert('Error', 'Please enter the 4-digit OTP');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const data: any = { otp: otpString };
+      if (email) data.email = email;
+      if (phone) data.phone = phone;
+
+      const response = await userService.verifyPasswordOTP(data);
+      // The token might be at the top level, inside a data object, or in a user object
+      const token = response.token || response.data?.token || response.user?.token;
+
+      // If we don't have a token but the message says success, we still proceed
+      const isSuccess = response.message?.toLowerCase().includes('success') || !!token;
+
+      if (!isSuccess) {
+        throw new Error(response.message || 'Verification failed. Please check your OTP.');
+      }
+
+      router.push({
+        pathname: '/create-new-password',
+        params: { token: token || '' } // Pass whatever we have
+      });
+    } catch (error: any) {
+      // Show the actual error message from the response or the error object
+      const message = error?.response?.data?.message || error.message || 'Invalid OTP. Please try again.';
+      Alert.alert('Error', message);
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleChange = (text: string, index: number) => {
     if (text.length > 1) {
-        // Handle paste logic if needed, simplify for now to just take last char
         text = text[text.length - 1];
     }
 
@@ -36,7 +67,6 @@ export default function OtpVerification() {
     newOtp[index] = text;
     setOtp(newOtp);
 
-    // Auto-focus next input
     if (text && index < 3) {
         inputRefs.current[index + 1]?.focus();
     }
@@ -64,7 +94,7 @@ export default function OtpVerification() {
         <View style={styles.titleContainer}>
             <Text style={[styles.title, { color: colors.text }]}>OTP Verification 🧐</Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-                We’ve sent you a confirmation code to your email {email ? String(email) : 'your email'}
+                We’ve sent you a confirmation code to your {email ? `email ${email}` : `phone number ${phone}`}
             </Text>
         </View>
 
@@ -76,9 +106,9 @@ export default function OtpVerification() {
                     style={[
                         styles.otpInput, 
                         { 
-                            backgroundColor: themeMode === 'dark' ? colors.bglight01 : '#fff', // White explicitly in light mode? Or transparent? Using white/bglight based on image usually white inputs with border
+                            backgroundColor: themeMode === 'dark' ? colors.bglight01 : '#fff',
                             color: colors.text,
-                            borderColor: digit ? '#526D65' : colors.gray300, // Green border if filled
+                            borderColor: digit ? '#526D65' : colors.gray300,
                             borderWidth: 1.5
                         }
                     ]}
@@ -94,10 +124,15 @@ export default function OtpVerification() {
         <Text style={styles.timerText}>Resend in 30s</Text>
 
         <TouchableOpacity 
-            style={[styles.nextButton, { backgroundColor: '#526D65' }]} 
+            style={[styles.nextButton, { backgroundColor: '#526D65' }, loading && { opacity: 0.7 }]} 
             onPress={handleNext}
+            disabled={loading}
         >
-            <Text style={styles.nextButtonText}>Next</Text>
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.nextButtonText}>Next</Text>
+            )}
         </TouchableOpacity>
 
       </ScrollView>

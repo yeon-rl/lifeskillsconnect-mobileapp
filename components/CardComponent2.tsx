@@ -1,7 +1,8 @@
 import { useThemedColors } from "@/hooks/use-themed-colors";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { Image } from "expo-image";
 import React from "react";
-import { Image, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { ThemedText } from "./themed-text";
 
 interface CardComponent2Props {
@@ -9,6 +10,8 @@ interface CardComponent2Props {
   rating?: number;
   reviews?: number;
   onViewModule?: () => void;
+  isPremium?: boolean;
+  image?: string;
 }
 
 const CardComponent2 = ({
@@ -16,6 +19,8 @@ const CardComponent2 = ({
   rating = 4.5,
   reviews = 128,
   onViewModule,
+  isPremium = false,
+  image,
 }: CardComponent2Props) => {
   const colors = useThemedColors();
 
@@ -26,20 +31,37 @@ const CardComponent2 = ({
         backgroundColor: colors.bglight01,
         borderRadius: 12,
         width: 180,
-        height: "auto",
+        height: 200,
         paddingBottom: 12,
       }}
     >
       {/* Course Image */}
       <View
-        className="w-full h-[100px] overflow-hidden rounded-2xl p-2"
+        className="w-full h-[100px] overflow-hidden rounded-2xl p-2 relative"
         style={{ borderRadius: 12 }}
       >
         <Image
-          source={require("../assets/images/woman.png")}
-          className="w-full h-full rounded-xl"
-          resizeMode="cover"
+          source={image ? { uri: image } : require("../assets/images/woman.png")}
+          className="rounded-xl"
+          style={{ width: '100%', height: '100%' }}
+          contentFit="cover"
+          transition={500}
         />
+        {isPremium && (
+          <View 
+            style={{ 
+              position: 'absolute', 
+              top: 6, 
+              right: 6, 
+              backgroundColor: '#1aa1dbff', 
+              paddingHorizontal: 6, 
+              paddingVertical: 1, 
+              borderRadius: 5 
+            }}
+          >
+            <ThemedText style={{ color: 'white', fontSize: 10, fontWeight: 'bold', textAlign: 'center' }}>Premium</ThemedText>
+          </View>
+        )}
       </View>
 
       <View className="px-3" style={{ flex: 1, justifyContent: "space-between" }}>

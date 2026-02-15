@@ -1,7 +1,8 @@
 import { useThemedColors } from '@/hooks/use-themed-colors';
+import { getCrisesHelp } from '@/utils/api';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Linking,
   Platform,
@@ -11,113 +12,128 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { toast } from 'sonner-native';
 
-interface CrisisService {
+interface CrisisHelpCard {
   id: string;
-  title: string;
+  name: string;
   description: string;
-  phoneNumber: string;
-  emoji?: string;
-  backgroundColor: string;
-  buttonColor: string;
-  titleColor: string;
+  number: string;
+  bgColor?: string;
+  textColor?: string;
+  buttonColor?: string;
 }
 
-const crisisServices: CrisisService[] = [
+const crisisTemplates = [
   {
     id: '1',
-    emoji: '🚨',
-    title: 'Emergency Services',
-    description: 'Call 999, For immediate danger or life-threatening emergencies (Police, Ambulance, Fire)',
-    phoneNumber: '999',
-    backgroundColor: '#EB433530',
-    buttonColor: '#A50E0E',
-    titleColor: '#526D65',
+    title: '🆘 Emergency Services',
+    bgColor: '#EB433530',
+    buttonColor: '#A10707',
+    textColor: '#A10707',
   },
   {
     id: '2',
-    emoji: '💬',
-    title: 'Mental Health & Emotional Support',
-    description: 'Samaritans, 24/7 free helpline for anyone in emotional distress - 116 123',
-    phoneNumber: '116123',
-    backgroundColor: '#4285F445',
+    title: '💬 Mental Health & Emotional Support',
+    bgColor: '#4285F445',
     buttonColor: '#4285F4',
-    titleColor: '#4285F4',
+    textColor: '#4285F4',
   },
   {
     id: '3',
-    emoji: '🏠',
-    title: 'Abuse & Domestic Violence',
-    description: 'National Domestic Abuse Helpline (Refuge), 24/7 support for women experiencing domestic abuse - 0808 2000 247',
-    phoneNumber: '08082000247',
-    backgroundColor: '#5A7C654D',
-    buttonColor: '#526D65',
-    titleColor: '#526D65',
+    title: 'Papyrus HOPELINEUK',
+    bgColor: '#2009F133',
+    buttonColor: '#2009F1',
+    textColor: '#2009F1',
   },
   {
     id: '4',
-    emoji: '🧒',
-    title: 'Children & Young People',
-    description: 'Childline (for under 19s - 24/7 support for any issue, bullying, abuse, stress) - 0800 1111',
-    phoneNumber: '08001111',
-    backgroundColor: '#7A1D6F42',
-    buttonColor: '#7B1FA2',
-    titleColor: '#7B1FA2',
+    title: '🏠 Abuse & Domestic Violence',
+    bgColor: '#5A7C654D',
+    buttonColor: '#5A7C65',
+    textColor: '#5A7C65',
   },
   {
     id: '5',
-    title: 'Rape Crisis England & Wales',
-    description: '0808 500 2222',
-    phoneNumber: '08085002222',
-    backgroundColor: '#29CD2F4F',
-    buttonColor: '#388E3C',
-    titleColor: '#388E3C',
+    title: '🧒 Children & Young People',
+    bgColor: '#7A1D6F42',
+    buttonColor: '#7A1D6F',
+    textColor: '#7A1D6F',
   },
   {
     id: '6',
-    title: 'NSPCC (Child protection and safeguarding)',
-    description: '0808 800 5000',
-    phoneNumber: '08088005000',
-    backgroundColor: '#6666664F',
-    buttonColor: '#616161',
-    titleColor: '#616161',
+    title: 'Rape Crisis England & Wales',
+    bgColor: '#29CD2F4F',
+    buttonColor: '#2AA52F',
+    textColor: '#2AA52F',
   },
   {
     id: '7',
-    title: 'Papyrus HOPELINEUK',
-    description: 'For young people struggling with suicidal thoughts (under 35)\n0800 068 4141',
-    phoneNumber: '08000684141',
-    backgroundColor: '#2009F133',
-    buttonColor: '#2929F1',
-    titleColor: '#2929F1',
+    title: 'NSPCC (Child protection and safeguarding)',
+    bgColor: '#0F4A974F',
+    buttonColor: '#0F4A97',
+    textColor: '#0F4A97',
   },
 ];
 
-const CrisisCard = ({ service }: { service: CrisisService }) => {
+const CrisisCard = ({ crisis }: { crisis: CrisisHelpCard }) => {
   const colors = useThemedColors();
-  const handleDial = () => {
-    Linking.openURL(`tel:${service.phoneNumber}`);
+  
+  // Clean both name and title (remove emojis, punctuation, lowercase)
+  const cleanName = crisis.name.toLowerCase().replace(/[^\w\s]/g, '').trim();
+  const nameWords = cleanName.split(/\s+/).filter((w) => w.length > 2);
+
+  const template = crisisTemplates.reduce((bestMatch, card) => {
+    const cleanTitle = card.title.toLowerCase().replace(/[^\w\s]/g, '').trim();
+    const titleWords = cleanTitle.split(/\s+/).filter((word) => word.length > 2);
+
+    // Check for direct inclusion first
+    if (cleanName.includes(cleanTitle) || cleanTitle.includes(cleanName)) {
+      return { card, score: 100 };
+    }
+
+    // Calculate word overlap score
+    const overlap = titleWords.filter((word) => nameWords.includes(word)).length;
+    const score = (overlap / Math.max(titleWords.length, 1)) * 10;
+
+    if (score > (bestMatch?.score || 0)) {
+      return { card, score };
+    }
+    return bestMatch;
+  }, null as { card: typeof crisisTemplates[0]; score: number } | null)?.card;
+
+  // Merge API data with template styles
+  const bgColor = crisis.bgColor || template?.bgColor || '#f3f4f6';
+  const textColor = crisis.textColor || template?.textColor || '#000000';
+  const buttonColor = crisis.buttonColor || template?.buttonColor || '#1f2937';
+
+  const handleDial = async () => {
+    const url = `tel:${crisis.number}`;
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        toast.error(`Phone dialer unavailable. You can manually dial: ${crisis.number}`);
+      }
+    } catch (error) {
+      console.error('An error occurred while trying to dial:', error);
+      toast.error('Unable to open the phone dialer.');
+    }
   };
 
   return (
-    <View style={[styles.card, { backgroundColor: service.backgroundColor }]}>
+    <View style={[styles.card, { backgroundColor: bgColor }]}>
       <View style={styles.cardHeader}>
-        {service.emoji && <Text style={styles.emoji}>{service.emoji}</Text>}
-        <Text style={[styles.cardTitle, { color: service.titleColor }]}>{service.title}</Text>
+        <Text style={[styles.cardTitle, { color: textColor }]}>{crisis.name}</Text>
       </View>
-      <Text style={[styles.cardDescription, { color: colors.text }]}>{service.description}</Text>
-      {service.id === '5' || service.id === '6' || service.id === '7' ? (
-        <View style={styles.phoneRow}>
-          <Ionicons name="call-outline" size={16} color="#000" />
-          <Text style={styles.phoneNumberText}> {service.phoneNumber}</Text>
-        </View>
-      ) : null}
+      <Text style={[styles.cardDescription, { color: colors.text }]}>{crisis.description}</Text>
       <TouchableOpacity 
-        style={[styles.dialButton, { backgroundColor: service.buttonColor }]} 
+        style={[styles.dialButton, { backgroundColor: buttonColor }]} 
         onPress={handleDial}
         activeOpacity={0.8}
       >
-        <Text style={styles.dialButtonText}>Dial now</Text>
+        <Text style={styles.dialButtonText}>Dial</Text>
       </TouchableOpacity>
     </View>
   );
@@ -126,10 +142,26 @@ const CrisisCard = ({ service }: { service: CrisisService }) => {
 export default function CrisisHelp() {
   const colors = useThemedColors();
   const router = useRouter();
+  const [crisisHelp, setCrisisHelp] = useState<CrisisHelpCard[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchCrisisHelp = async () => {
+      try {
+        const response = await getCrisesHelp();
+        // Assuming response structure is { crisisHelp: [...] }
+        setCrisisHelp(response.crisisHelp || []);
+      } catch (error) {
+        console.error('Error fetching crisis help:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchCrisisHelp();
+  }, []);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity 
           style={[styles.backButton, { backgroundColor: colors.bglight01 }]} 
@@ -141,16 +173,20 @@ export default function CrisisHelp() {
           <Text style={styles.headerEmoji}>🚨</Text>
           <Text style={[styles.headerTitle, { color: colors.text }]}>Crisis Help</Text>
         </View>
-        <View style={{ width: 40 }} /> {/* Spacer to balance the back button */}
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView 
         contentContainerStyle={styles.scrollContent} 
         showsVerticalScrollIndicator={false}
       >
-        {crisisServices.map((service) => (
-          <CrisisCard key={service.id} service={service} />
-        ))}
+        {loading ? (
+          <Text style={[styles.loadingText, { color: colors.text }]}>Loading...</Text>
+        ) : (
+          crisisHelp.map((crisis) => (
+            <CrisisCard key={crisis.id} crisis={crisis} />
+          ))
+        )}
       </ScrollView>
     </View>
   );
@@ -202,9 +238,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  emoji: {
-    fontSize: 20,
-  },
   cardTitle: {
     fontSize: 16,
     fontWeight: 'bold',
@@ -212,16 +245,7 @@ const styles = StyleSheet.create({
   },
   cardDescription: {
     fontSize: 14,
-    // color: '#333',
     lineHeight: 20,
-  },
-  phoneRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  phoneNumberText: {
-    fontSize: 14,
-    fontWeight: '600',
   },
   dialButton: {
     borderRadius: 8,
@@ -234,5 +258,10 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  loadingText: {
+    textAlign: 'center',
+    marginTop: 20,
+    fontSize: 16,
   },
 });

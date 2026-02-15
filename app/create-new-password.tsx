@@ -1,28 +1,31 @@
 import { useTheme } from '@/context/ThemeContext';
 import { useThemedColors } from '@/hooks/use-themed-colors';
+import { userService } from '@/services/api/apiServices';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 export default function CreateNewPassword() {
   const colors = useThemedColors();
   const router = useRouter();
   const { themeMode } = useTheme();
+  const { token } = useLocalSearchParams();
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<{ password?: string; confirm?: string }>({});
 
   const handleBack = () => {
     router.back();
   };
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
     let newErrors: { password?: string; confirm?: string } = {};
 
     if (password.length < 6) {
@@ -39,15 +42,22 @@ export default function CreateNewPassword() {
     }
 
     setError({});
-    setModalVisible(true);
+    setLoading(true);
+    try {
+      // Proceed with change password, using an empty string if token is missing
+      // Some backends might manage authorization via session/cookies after OTP verification
+      await userService.changePassword({ newPassword: password }, token ? String(token) : "");
+      setModalVisible(true);
+    } catch (err: any) {
+      const message = err?.response?.data?.message || 'Failed to change password. Please try again.';
+      Alert.alert('Error', message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDone = () => {
       setModalVisible(false);
-      // Navigate to profile or dashboard. Since we are in an "authenticated" flow but arguably in a stack, 
-      // getting back to main is probably right. 
-      // Wait, if we are in profile stack, maybe just popToTop or go back?
-      // "Successfully reset your password" -> Done usually implies finishing the flow.
       router.navigate('/(tabs)/profile'); 
   };
 
@@ -108,10 +118,15 @@ export default function CreateNewPassword() {
         </View>
 
         <TouchableOpacity 
-            style={[styles.verifyButton, { backgroundColor: '#526D65' }]} 
+            style={[styles.verifyButton, { backgroundColor: '#526D65' }, loading && { opacity: 0.7 }]} 
             onPress={handleVerify}
+            disabled={loading}
         >
-            <Text style={styles.verifyButtonText}>Verify</Text>
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.verifyButtonText}>Verify</Text>
+            )}
         </TouchableOpacity>
 
       </ScrollView>

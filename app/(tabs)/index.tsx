@@ -13,6 +13,7 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import UserHeader from "@/components/userHeader";
 import { useThemedColors } from "@/hooks/use-themed-colors";
+import { useFetchCourses, useFetchUserCourses } from "@/hooks/useCourses";
 import { useUserStore } from "@/store/userStore";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -21,11 +22,54 @@ import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
 export default function HomeScreen() {
   const colors = useThemedColors();
   const router = useRouter();
-  const [isPremiumUser] = React.useState(false); // Set to true for premium users
 
   const { currentUser } = useUserStore();
 
-  console.log(currentUser?.fullname, 'ehy hoo')
+  // Fetch all courses and store in Zustand (with caching)
+  const { courses: coursesData, isLoading: coursesLoading, error: coursesError } = useFetchCourses();
+  const courses = React.useMemo(() => coursesData?.courses || [], [coursesData]);
+
+  // Fetch user's enrolled courses
+  const { userCourses, isLoading: userCoursesLoading, error: userCoursesError } = useFetchUserCourses(currentUser?.id);
+
+  // Get up to 5 random ongoing courses
+  const randomizedOngoingCourses = React.useMemo(() => {
+    if (!userCourses?.subscriptions) return [];
+    
+    // Filter for ongoing courses
+    const ongoing = userCourses.subscriptions.filter(
+      (sub: any) => sub.status !== "completed"
+    );
+
+    // Shuffle and pick up to 5
+    return [...ongoing]
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 5);
+  }, [userCourses]);
+
+  // Get up to 5 random courses
+  const randomizedCourses = React.useMemo(() => {
+    if (!courses) return [];
+    
+    // Filter for ongoing courses
+    const course = courses.filter(
+      (sub: any) => sub.status !== "completed"
+    );
+
+    // Shuffle and pick up to 5
+    return [...course]
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 5);
+  }, [courses]);
+
+
+  const ongoingCoursesCount = React.useMemo(() => 
+    userCourses?.subscriptions?.filter((sub: any) => sub.status !== "completed").length || 0
+  , [userCourses]);
+
+  const completedCoursesCount = React.useMemo(() => 
+    userCourses?.subscriptions?.filter((sub: any) => sub.status === "completed").length || 0
+  , [userCourses]);
 
   return (
     <ThemedView style={{ flex: 1 }} className="px-4">
@@ -75,7 +119,7 @@ export default function HomeScreen() {
 
               {/* Button */}
               <Pressable
-                // onPress={handleNext}
+                onPress={() => router.push("/profile?openPremium=true")}
                 className="bg-[#4285F4] rounded-lg py-3 w-fit px-5 items-center mt-4"
               >
                 <ThemedText
@@ -102,7 +146,7 @@ export default function HomeScreen() {
                   className="font-bold"
                   style={{ color: colors.green }}
                 >
-                  3
+                  {ongoingCoursesCount}
                 </ThemedText>
               </View>
               <ThemedText
@@ -125,7 +169,7 @@ export default function HomeScreen() {
                   className="font-bold"
                   style={{ color: colors.green }}
                 >
-                  3
+                  {completedCoursesCount}
                 </ThemedText>
               </View>
               <ThemedText
@@ -147,7 +191,7 @@ export default function HomeScreen() {
               >
                 Pick Up Where You Left Off
               </ThemedText>
-              <Pressable>
+              <Pressable onPress={() => router.push("/explore")}>
                 <ThemedText
                   type="small"
                   className="font-semibold"
@@ -159,48 +203,39 @@ export default function HomeScreen() {
             </View>
 
             <View className="mt-3">
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                scrollEventThrottle={16}
-                decelerationRate="fast"
-                snapToInterval={300}
-              >
-                <CardComponent
-                  title="Financial Literacy"
-                  lessons={15}
-                  progress={65}
-                  onContinue={() => router.push("/module-detail/1")}
-                />
-                <View className="w-3" />
-                <CardComponent
-                  title="Career Development"
-                  lessons={12}
-                  progress={45}
-                  onContinue={() => router.push("/module-detail/2")}
-                />
-                <View className="w-3" />
-                <CardComponent
-                  title="Digital Marketing"
-                  lessons={18}
-                  progress={80}
-                  onContinue={() => router.push("/module-detail/3")}
-                />
-                <View className="w-3" />
-                <CardComponent
-                  title="Communication Skills"
-                  lessons={10}
-                  progress={30}
-                  onContinue={() => router.push("/module-detail/4")}
-                />
-                <View className="w-3" />
-                <CardComponent
-                  title="Time Management"
-                  lessons={8}
-                  progress={50}
-                  onContinue={() => router.push("/module-detail/5")}
-                />
-              </ScrollView>
+              {userCoursesLoading ? (
+                <View className="h-[260px] justify-center items-center">
+                  <ThemedText>Loading...</ThemedText>
+                </View>
+              ) : randomizedOngoingCourses.length > 0 ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  scrollEventThrottle={16}
+                  decelerationRate="fast"
+                  snapToInterval={300}
+                >
+                  {randomizedOngoingCourses.map((sub: any, index: number) => (
+                    <React.Fragment key={sub.id || index}>
+                      <CardComponent
+                        title={sub.course.title}
+                        lessons={sub.course.resources?.length || 0}
+                        progress={sub.progress || 0}
+                        isPremium={sub.course.is_paid === 1}
+                        image={sub.course.thumbnail}
+                        onContinue={() => router.push(`/module-detail/${sub.course.id}`)}
+                      />
+                      {index < randomizedOngoingCourses.length - 1 && <View className="w-3" />}
+                    </React.Fragment>
+                  ))}
+                </ScrollView>
+              ) : (
+                <View className="h-[200px] justify-center items-center bg-gray-100 rounded-2xl p-4">
+                  <ThemedText type="small14" className="text-center text-gray-500">
+                    You haven't started any modules yet. Explore new courses to begin!
+                  </ThemedText>
+                </View>
+              )}
             </View>
 
             <View
@@ -277,7 +312,7 @@ export default function HomeScreen() {
                       className="mt-2"
                       style={{ color: colors.white }}
                     >
-                      {currentUser?.total_points} pts
+                      {currentUser?.total_points ? currentUser?.total_points : 0} pts
                     </ThemedText>
                   </View>
                   <Pressable onPress={() => router.push("/reward-points")}>
@@ -300,7 +335,7 @@ export default function HomeScreen() {
                 >
                   Learn Something New
                 </ThemedText>
-                <Pressable>
+                <Pressable onPress={() => router.push("/all-modules")}>
                   <ThemedText
                     type="small"
                     className="font-semibold"
@@ -317,25 +352,19 @@ export default function HomeScreen() {
                 decelerationRate="fast"
                 snapToInterval={300}
               >
-                <CardComponent2
-                  title="Interview and workplace skills"
-                  onViewModule={() => router.push("/all-module-detail/1")}
-                />
-                <View className="w-3" />
-                <CardComponent2
-                  title="Effective Communication"
-                  onViewModule={() => router.push("/all-module-detail/2")}
-                />
-                <View className="w-3" />
-                <CardComponent2
-                  title="Teamwork and Collaboration"
-                  onViewModule={() => router.push("/all-module-detail/3")}
-                />
-                <View className="w-3" />
-                <CardComponent2
-                  title="Problem Solving"
-                  onViewModule={() => router.push("/all-module-detail/4")}
-                />
+                {
+                  randomizedCourses.map((course, idx) => {
+                    return (
+                      <CardComponent2
+                        key={idx}
+                        title={course.title}
+                        isPremium={course.is_paid === 1}
+                        image={course.thumbnail}
+                        onViewModule={() => router.push(`/all-module-detail/${course.id}`)}
+                      />
+                    )
+                  })
+                }
               </ScrollView>
             </View>
           </View>
