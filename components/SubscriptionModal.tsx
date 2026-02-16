@@ -1,11 +1,9 @@
 import { useThemedColors } from '@/hooks/use-themed-colors';
-import { authService, subscriptionService } from '@/services/api/apiServices';
+import { authService } from '@/services/api/apiServices';
 import { useUserStore } from '@/store/userStore';
 import { Ionicons } from '@expo/vector-icons';
-import { usePaymentSheet } from '@stripe/stripe-react-native';
 import React, { useState } from 'react';
-import { ActivityIndicator, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { requestPurchase } from 'react-native-iap';
+import { ActivityIndicator, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { toast } from 'sonner-native';
 
 interface SubscriptionModalProps {
@@ -27,107 +25,13 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ visible, o
     onClose();
   };
 
-  const { initPaymentSheet, presentPaymentSheet } = usePaymentSheet();
-  // const { connected, products, getProducts: fetchProducts, currentPurchase, finishTransaction } = useIAP();
-  
-  // Stubs for disabled IAP
-  const connected = false;
-  const products = [];
-  const fetchProducts = async () => {};
-  const currentPurchase = null;
-  const finishTransaction = async () => {};
+  // Payment logic removed
 
   const handleContinue = async () => {
     if (step === 'plans') {
       setStep('payment');
-      /* 
-      if (Platform.OS === 'android') {
-        initializeStripe();
-      } else if (Platform.OS === 'ios') {
-        initializeIAP();
-      }
-      */
     } else {
       toast.info("Credit card payment is coming soon!");
-      /*
-      if (Platform.OS === 'android') {
-        handleStripePayment();
-      } else if (Platform.OS === 'ios') {
-        handleIAPPayment();
-      }
-      */
-    }
-  };
-
-  const initializeStripe = async () => {
-    try {
-      const { authToken } = useUserStore.getState();
-      const plan = selectedPlan === 'annually' ? 'yearly' : 'monthly';
-      const data = await subscriptionService.getStripePaymentIntent(plan, authToken || undefined);
-      
-      if (data?.paymentIntent) {
-        const { error } = await initPaymentSheet({
-          merchantDisplayName: 'LifeSkills Connect',
-          customerId: data.customer,
-          customerEphemeralKeySecret: data.ephemeralKey,
-          paymentIntentClientSecret: data.paymentIntent,
-          allowsDelayedPaymentMethods: false,
-          defaultBillingDetails: {
-            name: useUserStore.getState().currentUser?.fullname,
-          }
-        });
-        if (error) {
-          console.error("Stripe init error:", error);
-        }
-      }
-    } catch (err) {
-      console.error("Stripe setup error:", err);
-    }
-  };
-
-  const initializeIAP = async () => {
-    try {
-      const productIds = Platform.select({
-        ios: ['com.lifeskills.monthly', 'com.lifeskills.annually'],
-        default: [],
-      });
-      await fetchProducts({ skus: productIds });
-    } catch (err) {
-      console.error("IAP fetch error:", err);
-    }
-  };
-
-  const handleStripePayment = async () => {
-    setLoading(true);
-    try {
-      const { error } = await presentPaymentSheet();
-      if (error) {
-        if (error.code !== 'Canceled') {
-          toast.error(error.message);
-        }
-      } else {
-        toast.success("Payment successful!");
-        await refreshProfile();
-        handleClose();
-      }
-    } catch (err) {
-      console.error("Stripe payment error:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleIAPPayment = async () => {
-    setLoading(true);
-    try {
-      const sku = selectedPlan === 'annually' ? 'com.lifeskills.annually' : 'com.lifeskills.monthly';
-      await requestPurchase({ sku });
-      // The actual verification and profile refresh will happen in a useEffect listening to currentPurchase
-    } catch (err: any) {
-      console.error("IAP purchase error:", err);
-      toast.error(err.message || "Purchase failed");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -138,27 +42,6 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ visible, o
       useUserStore.getState().setUser(profile.user);
     }
   };
-
-  /* 
-  React.useEffect(() => {
-    const checkIAP = async () => {
-      if (currentPurchase) {
-        try {
-          const { authToken } = useUserStore.getState();
-          await subscriptionService.verifyIAPReceipt(currentPurchase.transactionReceipt, authToken || undefined);
-          await finishTransaction({ purchase: currentPurchase });
-          toast.success("Welcome to Premium!");
-          await refreshProfile();
-          handleClose();
-        } catch (err) {
-          console.error("IAP verification error:", err);
-          toast.error("Failed to verify purchase");
-        }
-      }
-    };
-    checkIAP();
-  }, [currentPurchase]);
-  */
 
   const PlanOption = ({ 
     type, 

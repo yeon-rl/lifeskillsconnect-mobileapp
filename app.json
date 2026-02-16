@@ -14,8 +14,7 @@
       "backgroundColor": "#5A7C65"
     },
     "ios": {
-      "bundleIdentifier": "com.yourcompany.yourapp",
-      "buildNumber": "1.0.0",
+      "bundleIdentifier": "com.accordiaharmony.lifeskills",
       "supportsTablet": true,
       "splash": {
         "image": "./assets/images/splash.png",
@@ -36,7 +35,8 @@
         "backgroundColor": "#5A7C65"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.accordiaharmony.lifeskills"
     },
     "web": {
       "output": "static",
@@ -45,19 +45,18 @@
     "plugins": [
       "expo-router",
       "@react-native-community/datetimepicker",
-      "expo-web-browser",
-      "react-native-iap",
-      [
-        "@stripe/stripe-react-native",
-        {
-          "merchantIdentifier": "merchant.com.yourcompany.yourapp",
-          "enableGooglePay": true
-        }
-      ]
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "634bf0f9-81b4-4ebf-8d9e-cbf2b14ff39f"
+      }
+    },
+    "owner": "accordiaharmony01"
   }
 }

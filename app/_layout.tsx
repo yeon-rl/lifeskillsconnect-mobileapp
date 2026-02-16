@@ -1,14 +1,12 @@
 import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
+    DarkTheme,
+    DefaultTheme,
+    ThemeProvider,
 } from "@react-navigation/native";
-import { StripeProvider } from "@stripe/stripe-react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
-import { Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -118,16 +116,6 @@ function RootLayoutNav() {
     </ThemeProvider>
   );
 
-  if (Platform.OS === 'android') {
-    return (
-      <StripeProvider
-        publishableKey={process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || ""}
-      >
-        {content}
-      </StripeProvider>
-    );
-  }
-
   return content;
 }
 
@@ -135,20 +123,7 @@ function RootLayoutWrapper() {
   const colorScheme = useColorScheme();
   
   useEffect(() => {
-    // Initialize IAP connection (Commented out to fix E_IAP_NOT_AVAILABLE)
-    /*
-    const initializeIAP = async () => {
-      try {
-        await setup();
-        if (Platform.OS === 'android') {
-          await flushFailedPurchasesCachedAsPendingAndroid();
-        }
-      } catch (err) {
-        console.warn("IAP initialization failed", err);
-      }
-    };
-    initializeIAP();
-    */
+    // Payment initialization removed
   }, []);
 
   return (
