@@ -4,7 +4,7 @@
     "slug": "lifeskillsconnect-mobileapp",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/appLogo.png",
     "scheme": "lifeskillsconnectmobileapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,

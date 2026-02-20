@@ -1,19 +1,19 @@
 import {
-    DarkTheme,
-    DefaultTheme,
-    ThemeProvider,
+  DarkTheme,
+  DefaultTheme,
+  ThemeProvider,
 } from "@react-navigation/native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { SplashScreenWrapper } from "@/components/splash-screens/SplashScreenWrapper";
 import { GlobalLoader } from "@/components/ui/GlobalLoader";
-import { GluestackUIProvider } from "@/components/ui/gluestack-ui-provider";
+import { GluestackUIProvider } from "@/components/ui/gluestack-ui-provider/index";
 import { OnboardingProvider, useOnboarding } from "@/context/OnboardingContext";
 import { ThemeProvider as CustomThemeProvider } from "@/context/ThemeContext";
 import { UserProvider } from "@/context/UserContext";
@@ -77,7 +77,7 @@ function RootLayoutNav() {
       // Redirect to tabs if authenticated and trying to access auth group
       router.replace("/(tabs)");
     }
-  }, [isAuthenticated, segments, isOnboardingHydrated, isUserHydrated, splashComplete]);
+  }, [isAuthenticated, segments, isOnboardingHydrated, isUserHydrated, splashComplete, hasCompletedLanguageSelection, hasCompletedOnboarding, router]);
 
   // Navigation is now safe to render as state is ready and splash is finished
 

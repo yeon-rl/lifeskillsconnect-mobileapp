@@ -1,3 +1,11 @@
+// Polyfill for Array.prototype.toReversed which is used in newer metro versions
+// but might be missing in older Node.js environments.
+if (!Array.prototype.toReversed) {
+  Array.prototype.toReversed = function () {
+    return [...this].reverse();
+  };
+}
+
 const { getDefaultConfig } = require("@expo/metro-config");
 const { withNativeWind } = require("nativewind/metro");
 
