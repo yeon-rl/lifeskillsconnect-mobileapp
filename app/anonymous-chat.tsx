@@ -2,30 +2,30 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useThemedColors } from "@/hooks/use-themed-colors";
 import {
-  getChatHistory,
-  sendSupportMessage,
-  startAnonymousChat
+    getChatHistory,
+    sendSupportMessage,
+    startAnonymousChat
 } from "@/utils/api";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  View
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withDelay,
-  withRepeat,
-  withSequence,
-  withTiming
+    useAnimatedStyle,
+    useSharedValue,
+    withDelay,
+    withRepeat,
+    withSequence,
+    withTiming
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
@@ -85,8 +85,28 @@ export default function AnonymousChatScreen() {
   const [showAgentJoiningMsg, setShowAgentJoiningMsg] = useState(false);
   const [isAgentTyping, setIsAgentTyping] = useState(false);
   
-  const scrollViewRef = React.useRef<ScrollView>(null);
-  const pollInterval = React.useRef<any>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const pollInterval = useRef<any>(null);
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+  const prevMessagesCount = useRef(messages.length);
+
+  // Auto-scroll logic solely based on message array changes
+  useEffect(() => {
+    if (messages.length > prevMessagesCount.current) {
+      if (shouldAutoScroll) {
+        requestAnimationFrame(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: true });
+        });
+      }
+    }
+    prevMessagesCount.current = messages.length;
+  }, [messages.length, shouldAutoScroll]);
+
+  const handleScroll = useCallback((event: any) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 100;
+    setShouldAutoScroll(isCloseToBottom);
+  }, []);
 
   const clearChatSession = async () => {
     try {
@@ -113,7 +133,7 @@ export default function AnonymousChatScreen() {
   };
 
   // Restore session from AsyncStorage on mount
-  React.useEffect(() => {
+  useEffect(() => {
     const restoreSession = async () => {
       try {
         const [savedChatId, savedSessionActive, savedMessages] = await Promise.all([
@@ -144,7 +164,7 @@ export default function AnonymousChatScreen() {
   }, []);
 
   // Save session status whenever it changes
-  React.useEffect(() => {
+  useEffect(() => {
     const saveSession = async () => {
       try {
         if (chatId) {
@@ -163,7 +183,7 @@ export default function AnonymousChatScreen() {
   }, [chatId, sessionActive, messages]);
 
   // Determine if we should show the "agent joining" message
-  React.useEffect(() => {
+  useEffect(() => {
     if (sessionActive && messages.length > 0) {
       const hasAgent = messages.some(m => m.sender === "responder");
       setShowAgentJoiningMsg(!hasAgent);
@@ -219,7 +239,7 @@ export default function AnonymousChatScreen() {
   };
 
   // Set up polling
-  React.useEffect(() => {
+  useEffect(() => {
     const isMounted = { current: true };
     
     if (chatId && sessionActive) {
@@ -244,17 +264,14 @@ export default function AnonymousChatScreen() {
     try {
       setIsConnecting(true);
       setErrorMessage(null);
-      console.log("Starting anonymous chat with message:", initialMessage);
       
       const data = await startAnonymousChat(initialMessage);
-      console.log("Chat started successfully. Response data:", data);
       
       if (!data || !data.chatId) {
         throw new Error("Invalid response from startAnonymousChat: missing chatId");
       }
 
       const newChatId = String(data.chatId);
-      console.log("Setting chatId to string:", newChatId);
       
       setAgentStatus("Chat initiated. Waiting for a counselor to join...");
       setChatId(newChatId);
@@ -284,6 +301,7 @@ export default function AnonymousChatScreen() {
 
     setMessages((prev) => [...prev, userMessage]);
     setInputText("");
+    setShouldAutoScroll(true);
 
     let currentChatId = chatId;
     if (!currentChatId) {
@@ -292,11 +310,7 @@ export default function AnonymousChatScreen() {
 
     if (currentChatId) {
       try {
-        console.log(`Sending message to chat ${currentChatId}:`, finalMessage);
         await sendSupportMessage(currentChatId, finalMessage);
-        console.log("Message sent successfully to backend");
-        
-        // fetchMessages will be triggered by polling, but we can do an immediate fetch if needed
         fetchMessages(currentChatId, { current: true });
       } catch (error: any) {
         console.error("Error sending message:", error);
@@ -304,7 +318,6 @@ export default function AnonymousChatScreen() {
         setErrorMessage(`${errorMsg}. Please try again.`);
       }
     } else {
-      console.warn("No chatId available, message not sent to backend. Restoring input.");
       setInputText(finalMessage);
     }
   };
@@ -323,7 +336,7 @@ export default function AnonymousChatScreen() {
               <Path 
                 fillRule="evenodd" 
                 clipRule="evenodd" 
-                d="M7.01813 11.3895C6.89044 11.2616 6.81873 11.0883 6.81873 10.9076C6.81873 10.7269 6.89044 10.5537 7.01813 10.4258L13.8363 3.60763C13.8987 3.54064 13.974 3.48692 14.0576 3.44965C14.1413 3.41238 14.2316 3.39235 14.3231 3.39073C14.4147 3.38912 14.5056 3.40596 14.5905 3.44025C14.6754 3.47454 14.7525 3.52558 14.8173 3.59032C14.882 3.65507 14.933 3.73219 14.9673 3.81709C15.0016 3.90199 15.0185 3.99292 15.0168 4.08447C15.0152 4.17602 14.9952 4.2663 14.9579 4.34994C14.9207 4.43358 14.8669 4.50885 14.7999 4.57127L8.46358 10.9076L14.7999 17.244C14.8669 17.3064 14.9207 17.3817 14.9579 17.4653C14.9952 17.549 15.0152 17.6392 15.0168 17.7308C15.0185 17.8223 15.0016 17.9133 14.9673 17.9982C14.933 18.0831 14.882 18.1602 14.8173 18.2249C14.7525 18.2897 14.6754 18.3407 14.5905 18.375C14.5056 18.4093 14.4147 18.4261 14.3231 18.4245C14.2316 18.4229 14.1413 18.4029 14.0576 18.3656C13.974 18.3284 13.8987 18.2746 13.8363 18.2076L7.01813 11.3895Z" 
+                d="M7.01813 11.3895C6.89044 11.2616 6.81873 11.0883 6.81873 10.9076C6.81873 10.7269 6.89044 10.5537 7.01813 10.4258L13.8363 3.60763C13.8987 3.54064 13.974 3.48692 14.0576 3.44965C14.1413 3.41238 14.2316 3.39235 14.3231 3.39073C14.4147 3.38912 14.5056 3.40596 14.5905 3.44025C14.6754 3.47454 14.7525 3.52558 14.8173 3.59032C14.882 3.65507 14.933 3.73219 14.9673 3.81709C15.0016 3.90199 15.0185 3.99292 15.0168 4.08447C15.0152 4.17602 14.9952 4.2663 14.9579 4.34994C14.9207 4.43358 14.8669 4.50885 14.7999 4.57127L8.46358 10.9076L14.7999 17.244C14.8669 17.3064 14.9207 17.3817 14.9579 17.4653C14.9952 17.549 15.0152 17.6392 15.0168 17.7308C15.0185 17.8223 15.0016 17.9133 14.9673 17.9982C14.933 18.0831 14.882 18.1602 14.8173 18.2249C14.7525 18.2897 14.6754 18.3407 14.3231 18.4245C14.2316 18.4229 14.1413 18.4029 14.0576 18.3656C13.974 18.3284 13.8987 18.2746 13.8363 18.2076L7.01813 11.3895Z" 
                 fill="#5A7C65" 
                 fillOpacity={0.5}
               />
@@ -345,7 +358,7 @@ export default function AnonymousChatScreen() {
               </ThemedText>
             </TouchableOpacity>
           ) : (
-            <View className="w-16" /> // Placeholder to maintain layout
+            <View className="w-16" />
           )}
         </View>
 
@@ -357,7 +370,13 @@ export default function AnonymousChatScreen() {
             flexGrow: 1, 
             paddingBottom: 20 
           }}
-          onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          onContentSizeChange={() => {
+            if (shouldAutoScroll && messages.length > 0) {
+              scrollViewRef.current?.scrollToEnd({ animated: false });
+            }
+          }}
           showsVerticalScrollIndicator={false}
         >
           {messages.length === 0 ? (

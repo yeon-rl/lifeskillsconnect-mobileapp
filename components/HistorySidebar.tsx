@@ -3,12 +3,12 @@ import { useThemedColors } from "@/hooks/use-themed-colors";
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import {
-  Dimensions,
-  Modal,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Dimensions,
+    Modal,
+    ScrollView,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -111,7 +111,6 @@ export default function HistorySidebar({
                           key={item.id}
                           onPress={() => {
                             onSelectItem(item.id);
-                            onClose();
                           }}
                         >
                           <ThemedText className="text-gray-500 text-base" numberOfLines={1}>

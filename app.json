@@ -22,7 +22,8 @@
         "backgroundColor": "#5A7C65"
       },
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "Allow $(PRODUCT_NAME) to use your location to automatically set your country and nationality."
       }
     },
     "android": {
@@ -48,6 +49,7 @@
     "plugins": [
       "expo-router",
       "@react-native-community/datetimepicker",
+      "expo-location",
       "expo-web-browser"
     ],
     "experiments": {

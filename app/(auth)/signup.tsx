@@ -5,13 +5,15 @@ import { authService } from "@/services/api/apiServices";
 import { useUserStore } from "@/store/userStore";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import * as Location from "expo-location";
 import { useRouter } from "expo-router";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
   Image,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   TextInput,
@@ -341,11 +343,11 @@ export default function SignupScreen() {
   const [accountData, setAccountData] = useState<AccountData>({
     fullName: "",
     username: "",
-    countryCode: "+1",
+    countryCode: "+234",
     phoneNumber: "",
     dateOfBirth: null,
     hearAbout: "",
-    nationality: "",
+    nationality: "Nigeria",
   });
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
@@ -366,9 +368,47 @@ export default function SignupScreen() {
   const otpRef4 = useRef<TextInput>(null);
   const otpRefs = [otpRef1, otpRef2, otpRef3, otpRef4];
 
+  const { currentUser, setUser, setAuthToken, setAuthenticated, updateUser } = useUserStore();
   const colors = useThemedColors();
   const router = useRouter();
-  const { currentUser, setUser, setAuthToken, setAuthenticated, updateUser } = useUserStore();
+
+  // Auto-detect location
+  useEffect(() => {
+    (async () => {
+      try {
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          console.log("Location permission denied");
+          return;
+        }
+
+        let location = await Location.getCurrentPositionAsync({});
+        let reverseGeocode = await Location.reverseGeocodeAsync({
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        });
+
+        if (reverseGeocode.length > 0) {
+          const countryData = reverseGeocode[0];
+          const isoCode = countryData.isoCountryCode; // e.g., 'NG', 'US'
+          const countryName = countryData.country;    // e.g., 'Nigeria', 'United States'
+
+          if (isoCode) {
+            // Find matched code using isoCode
+            const matchedCode = COUNTRY_CODES.find(cc => cc.country === isoCode.toUpperCase());
+            
+            setAccountData(prev => ({
+              ...prev,
+              countryCode: matchedCode ? matchedCode.code : prev.countryCode,
+              nationality: countryName || prev.nationality
+            }));
+          }
+        }
+      } catch (error) {
+        console.error("Error getting location:", error);
+      }
+    })();
+  }, []);
 
   // Email validation
   const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -385,14 +425,17 @@ export default function SignupScreen() {
     accountData.username.trim() &&
     accountData.phoneNumber.trim() &&
     accountData.dateOfBirth &&
-    accountData.hearAbout.trim() &&
     accountData.nationality.trim();
 
   const handleDateChange = (event: any, selectedDate: any) => {
-    if (selectedDate) {
-      setAccountData({ ...accountData, dateOfBirth: selectedDate });
+    if (event.type === "set") {
+      if (selectedDate) {
+        setAccountData({ ...accountData, dateOfBirth: selectedDate });
+      }
+      setShowDatePicker(false);
+    } else if (event.type === "dismissed") {
+      setShowDatePicker(false);
     }
-    setShowDatePicker(false);
   };
 
   const handleInterestSelect = (interestId: string) => {
@@ -572,7 +615,7 @@ export default function SignupScreen() {
             <ThemedText
               style={{ color: colors.gray700 }}
               className="text-sm"
-              type="small"
+              type="small14"
             >
               Start Your Journey to Real-World Confidence.
             </ThemedText>
@@ -582,10 +625,10 @@ export default function SignupScreen() {
           <View className="mb-6">
             <ThemedText
               style={{ color: colors.text }}
-              type="small"
-              className="mb-2"
+              type="small14"
+              className="mb-2 font-semibold"
             >
-              Email
+              Email*
             </ThemedText>
             <View
               style={{
@@ -626,10 +669,10 @@ export default function SignupScreen() {
           <View className="mb-6">
             <ThemedText
               style={{ color: colors.text }}
-              type="small"
-              className="mb-2"
+              type="small14"
+              className="mb-2 font-semibold"
             >
-              Password
+              Password*
             </ThemedText>
             <View
               style={{
@@ -679,10 +722,10 @@ export default function SignupScreen() {
           <View className="mb-8">
             <ThemedText
               style={{ color: colors.text }}
-              type="small"
-              className="mb-2"
+              type="small14"
+              className="mb-2 font-semibold"
             >
-              Confirm Password
+              Confirm Password*
             </ThemedText>
             <View
               style={{
@@ -734,8 +777,34 @@ export default function SignupScreen() {
               backgroundColor: isEmailStepValid ? "#5A7C65" : "#5A7C651A",
             }}
             className="rounded-lg py-4 items-center mb-4"
-            disabled={!isEmailStepValid || loading}
-            onPress={handleSignup}
+            disabled={loading}
+            onPress={() => {
+              if (!email.trim()) {
+                toast.error("Email is required.");
+                return;
+              }
+              if (!isEmailValid) {
+                toast.error("Please enter a valid email address.");
+                return;
+              }
+              if (!password) {
+                toast.error("Password is required.");
+                return;
+              }
+              if (password.length < 6) {
+                toast.error("Password must be at least 6 characters.");
+                return;
+              }
+              if (!confirmPassword) {
+                toast.error("Please confirm your password.");
+                return;
+              }
+              if (!isPasswordsMatch) {
+                toast.error("Passwords do not match.");
+                return;
+              }
+              handleSignup();
+            }}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />
@@ -837,12 +906,12 @@ export default function SignupScreen() {
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
         <ThemedView
           style={{ backgroundColor: colors.background }}
-          className="flex-1 px-6 pt-8"
+          className="flex-1 px-6 pt-2"
         >
           {/* Back Button */}
           <Pressable
             onPress={() => setCurrentStep("email")}
-            className="mb-8 p-2 mt-10"
+            className="mb-4 p-2"
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <Svg
@@ -999,11 +1068,11 @@ export default function SignupScreen() {
           style={{ backgroundColor: colors.background }}
           className="flex-1 px-6"
         >
-          <ScrollView showsVerticalScrollIndicator={false} className="pt-8">
+          <ScrollView showsVerticalScrollIndicator={false} className="pt-2">
             {/* Back Button */}
             <Pressable
               onPress={() => setCurrentStep("otp")}
-              className="mb-4 px-2 "
+              className="mb-0 px-2"
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <Svg
@@ -1048,7 +1117,7 @@ export default function SignupScreen() {
               <ThemedText
                 style={{ color: colors.gray700 }}
                 className="text-sm"
-                type="small"
+                type="small14"
               >
                 Let’s complete your account.
               </ThemedText>
@@ -1058,10 +1127,10 @@ export default function SignupScreen() {
             <View className="mb-6">
               <ThemedText
                 style={{ color: colors.text }}
-                type="small"
-                className="mb-2"
+                type="small14"
+                className="mb-2 font-semibold"
               >
-                Full Name
+                Full Name*
               </ThemedText>
               <TextInput
                 className="rounded-lg px-4 py-4 text-base"
@@ -1082,10 +1151,10 @@ export default function SignupScreen() {
             <View className="mb-6">
               <ThemedText
                 style={{ color: colors.text }}
-                type="small"
-                className="mb-2"
+                type="small14"
+                className="mb-2 font-semibold"
               >
-                Username
+                Username*
               </ThemedText>
               <TextInput
                 className="rounded-lg px-4 py-4 text-base"
@@ -1106,10 +1175,10 @@ export default function SignupScreen() {
             <View className="mb-6">
               <ThemedText
                 style={{ color: colors.text }}
-                type="small"
-                className="mb-2"
+                type="small14"
+                className="mb-2 font-semibold"
               >
-                Phone Number
+                Phone Number*
               </ThemedText>
               <View className="flex-row gap-2">
                 {/* Country Code Dropdown */}
@@ -1162,7 +1231,7 @@ export default function SignupScreen() {
                       color: colors.text,
                       backgroundColor: colors.input,
                     }}
-                    placeholder="Search code..."
+                    placeholder="Search country..."
                     placeholderTextColor="#999"
                     value={countryCodeSearch}
                     onChangeText={setCountryCodeSearch}
@@ -1186,9 +1255,14 @@ export default function SignupScreen() {
                           setCountryCodeSearch("");
                         }}
                       >
-                        <ThemedText style={{ color: colors.text }}>
-                          {cc.country} {cc.code}
-                        </ThemedText>
+                        <View className="flex-row justify-between items-center">
+                          <ThemedText style={{ color: colors.text }}>
+                            {cc.country}
+                          </ThemedText>
+                          <ThemedText style={{ color: colors.gray700 }}>
+                            {cc.code}
+                          </ThemedText>
+                        </View>
                       </Pressable>
                     ))}
                   </ScrollView>
@@ -1200,10 +1274,10 @@ export default function SignupScreen() {
             <View className="mb-6">
               <ThemedText
                 style={{ color: colors.text }}
-                type="small"
-                className="mb-2"
+                type="small14"
+                className="mb-2 font-semibold"
               >
-                Date of Birth
+                Date of Birth*
               </ThemedText>
               <Pressable
                 className="rounded-lg px-4 py-4 flex-row items-center justify-between"
@@ -1223,18 +1297,13 @@ export default function SignupScreen() {
               </Pressable>
 
               {showDatePicker && (
-                <View
-                  className="mt-4 mb-4 border rounded-lg"
-                  style={{ borderColor: colors.primary }}
-                >
-                  <DateTimePicker
-                    value={accountData.dateOfBirth || new Date()}
-                    mode="date"
-                    display="spinner"
-                    onChange={handleDateChange}
-                    textColor={colors.text}
-                  />
-                </View>
+                <DateTimePicker
+                  value={accountData.dateOfBirth || new Date()}
+                  mode="date"
+                  display={Platform.OS === "ios" ? "inline" : "calendar"}
+                  onChange={handleDateChange}
+                  textColor={colors.text}
+                />
               )}
             </View>
 
@@ -1242,8 +1311,8 @@ export default function SignupScreen() {
             <View className="mb-6">
               <ThemedText
                 style={{ color: colors.text }}
-                type="small"
-                className="mb-2"
+                type="small14"
+                className="mb-2 font-semibold"
               >
                 How did you hear about us?
               </ThemedText>
@@ -1266,10 +1335,10 @@ export default function SignupScreen() {
             <View className="mb-8">
               <ThemedText
                 style={{ color: colors.text }}
-                type="small"
-                className="mb-2"
+                type="small14"
+                className="mb-2 font-semibold"
               >
-                Nationality
+                Nationality*
               </ThemedText>
               <Pressable
                 className="rounded-lg px-4 py-4 flex-row items-center justify-between"
@@ -1299,12 +1368,12 @@ export default function SignupScreen() {
                   }}
                 >
                   <TextInput
-                    className="px-4 py-2 text-base"
+                    className="px-4 py-3 text-base"
                     style={{
                       color: colors.text,
                       backgroundColor: colors.background,
                     }}
-                    placeholder="Search country..."
+                    placeholder="Search country"
                     placeholderTextColor="#999"
                     value={nationalitySearch}
                     onChangeText={setNationalitySearch}
@@ -1344,8 +1413,30 @@ export default function SignupScreen() {
                 backgroundColor: isAccountStepValid ? "#5A7C65" : "#5A7C651A",
               }}
               className="rounded-lg py-4 items-center mb-8"
-              disabled={!isAccountStepValid || loading}
-              onPress={handleCompleteProfile}
+              disabled={loading}
+              onPress={() => {
+                if (!accountData.fullName.trim()) {
+                  toast.error("Full Name is required.");
+                  return;
+                }
+                if (!accountData.username.trim()) {
+                  toast.error("Username is required.");
+                  return;
+                }
+                if (!accountData.phoneNumber.trim()) {
+                  toast.error("Phone Number is required.");
+                  return;
+                }
+                if (!accountData.dateOfBirth) {
+                  toast.error("Date of Birth is required.");
+                  return;
+                }
+                if (!accountData.nationality.trim()) {
+                  toast.error("Nationality is required.");
+                  return;
+                }
+                handleCompleteProfile();
+              }}
             >
               {loading ? (
                 <ActivityIndicator color="#fff" />
@@ -1376,7 +1467,7 @@ export default function SignupScreen() {
           <View className="flex-row justify-between">
             <Pressable
               onPress={() => setCurrentStep("account")}
-              className="mb-4 px-2 "
+              className="mb-0 px-2"
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <Svg
@@ -1514,8 +1605,14 @@ export default function SignupScreen() {
                 selectedInterests.length >= 3 ? "#5A7C65" : "#5A7C651A",
             }}
             className="rounded-lg py-4 items-center mb-8"
-            disabled={selectedInterests.length < 3 || loading}
-            onPress={handleUpdateInterests}
+            disabled={loading}
+            onPress={() => {
+              if (selectedInterests.length < 3) {
+                toast.error("Please select at least 3 skills to get started.");
+                return;
+              }
+              handleUpdateInterests();
+            }}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />

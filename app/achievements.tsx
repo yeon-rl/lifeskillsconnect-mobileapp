@@ -49,7 +49,7 @@ export default function Achievements() {
     fetchUserPoints();
   }, [authToken]);
 
-  // console.log(JSON.stringify(currentUser, null, 2), "check current user")
+  console.log(JSON.stringify(userPointsData, null, 2), "check current user")
 
   const AchievementItem = ({ 
     label, 
@@ -165,9 +165,9 @@ export default function Achievements() {
                     />
                 </View>
 
-                <Text style={[styles.modalTitle, { color: themedColors.text }]}>Current Points: {userPointsData?.current_points || 0} LScPoints</Text>
+                <Text style={[styles.modalTitle, { color: themedColors.text }]}>Current Points: {userPointsData?.total_points || 0} Points</Text>
                 <Text style={[styles.modalText, { color: themedColors.gray700 }]}>
-                    You've accumulated a total of {userPointsData?.total_points || 0} LScPoints
+                    You've accumulated a total of {userPointsData?.total_points || 0} Points
                 </Text>
 
                 <View style={styles.modalButtonsRow}>

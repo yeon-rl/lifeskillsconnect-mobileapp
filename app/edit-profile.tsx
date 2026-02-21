@@ -141,11 +141,7 @@ export default function EditProfile() {
         preferred_language: paramLanguage,
       };
 
-      console.log('[EditProfile] Sending updateData:', JSON.stringify(updateData, null, 2));
-
       const response = await userService.updateUserProfile(updateData, authToken || "");
-      
-      console.log('[EditProfile] API Response:', JSON.stringify(response, null, 2));
       
       if (response && response.user) {
         updateUser(response.user);
@@ -181,13 +177,7 @@ export default function EditProfile() {
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Edit Profile</Text>
-        <TouchableOpacity onPress={handleSaveChanges} disabled={isSaving}>
-          {isSaving ? (
-            <ActivityIndicator size="small" color={colors.primary} />
-          ) : (
-            <Text style={[styles.saveText, { color: colors.primary }]}>Save</Text>
-          )}
-        </TouchableOpacity>
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -228,11 +218,19 @@ export default function EditProfile() {
         <View style={styles.inputGroup}>
           <Text style={[styles.label, { color: colors.text }]}>Name</Text>
           <TextInput
-            style={[styles.input, { backgroundColor: themeMode === 'dark' ? colors.bglight01 : '#F9FAFB', color: colors.text }]}
+            style={[
+              styles.input, 
+              { 
+                backgroundColor: themeMode === 'dark' ? colors.bglight01 : '#F9FAFB', 
+                color: colors.text,
+                opacity: 0.7 
+              }
+            ]}
             value={name}
             onChangeText={setName}
             placeholder="Name"
             placeholderTextColor={colors.gray300}
+            editable={false}
           />
         </View>
 
@@ -283,7 +281,15 @@ export default function EditProfile() {
           <Text style={[styles.label, { color: colors.text }]}>Location</Text>
           <TouchableOpacity 
             onPress={() => setShowCountryDropdown(!showCountryDropdown)}
-            style={[styles.input, styles.dropdown, { backgroundColor: themeMode === 'dark' ? colors.bglight01 : '#F9FAFB' }]}
+            disabled={!!currentUser?.nationality}
+            style={[
+              styles.input, 
+              styles.dropdown, 
+              { 
+                backgroundColor: themeMode === 'dark' ? colors.bglight01 : '#F9FAFB',
+                opacity: currentUser?.nationality ? 0.7 : 1
+              }
+            ]}
           >
              <Text style={{ color: colors.text }}>{location || 'Select Country'}</Text>
              <Ionicons name={showCountryDropdown ? "chevron-up" : "chevron-down"} size={20} color={colors.gray300} />

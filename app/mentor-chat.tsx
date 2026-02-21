@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
   KeyboardAvoidingView,
@@ -41,6 +41,8 @@ export default function MentorChatScreen() {
   
   const { authToken } = useUserStore();
   const scrollViewRef = useRef<ScrollView>(null);
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+  const prevMessagesCount = useRef(chatMessages.length);
 
   // Fetch conversations on mount
   React.useEffect(() => {
@@ -49,9 +51,30 @@ export default function MentorChatScreen() {
     }
   }, [authToken, fetchConversations]);
 
+  // Auto-scroll logic solely based on message array changes
+  React.useEffect(() => {
+    if (chatMessages.length > prevMessagesCount.current) {
+      if (shouldAutoScroll) {
+        // Use requestAnimationFrame to ensure layout has updated
+        requestAnimationFrame(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: true });
+        });
+      }
+    }
+    prevMessagesCount.current = chatMessages.length;
+  }, [chatMessages.length, shouldAutoScroll]);
+
+  const handleScroll = useCallback((event: any) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    // If user is within 100px of bottom, continue auto-scrolling
+    const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 100;
+    setShouldAutoScroll(isCloseToBottom);
+  }, []);
+
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || !authToken) return;
     setInputText("");
+    setShouldAutoScroll(true);
     await sendMessage(text, authToken);
   };
 
@@ -60,37 +83,29 @@ export default function MentorChatScreen() {
   };
 
   const handleNewChat = () => {
-    startNewChat();
     setIsSidebarVisible(false);
+    startNewChat();
   };
 
   const handleSelectConversation = (conversationId: string) => {
+    setIsSidebarVisible(false); // Close sidebar FIRST
     if (authToken) {
       loadConversation(conversationId, authToken);
-      setIsSidebarVisible(false);
+      setShouldAutoScroll(true);
     }
   };
 
-  // Map store conversations to HistorySidebar format
-  const mappedConversations = conversations.map(conv => ({
+  // Memoize mapped conversations to prevent unnecessary re-renders
+  const mappedConversations = useMemo(() => conversations.map(conv => ({
     id: conv.id,
     title: conv.title,
     messages: conv.messages || [],
     date: new Date(conv.createdAt)
-  }));
+  })), [conversations]);
 
   return (
     <ThemedView style={{ flex: 1 }} className="bg-white">
       <SafeAreaView edges={["top"]} style={{ flex: 1 }}>
-        {/* Background Blob */}
-        <View style={{ position: "absolute", top: -50, right: -50, zIndex: -1 }}>
-          {/* <Svg width="345" height="262" viewBox="0 0 345 262" fill="none">
-            <G opacity="0.2" filter="url(#filter0_f_394_2369)">
-            <Circle cx="197.4" cy="64" r="114" fill="#2B59FC"/>
-            </G>
-          </Svg> */}
-        </View>
-
         {/* Header */}
         <View className="flex-row items-center justify-between px-4 py-2">
           <TouchableOpacity onPress={() => router.back()} className="p-2 rounded-full" style={{backgroundColor: colors.bglight10}}>
@@ -106,20 +121,20 @@ export default function MentorChatScreen() {
           </TouchableOpacity>
         </View>
 
-        <HistorySidebar
-          isVisible={isSidebarVisible}
-          onClose={() => setIsSidebarVisible(false)}
-          onSelectItem={handleSelectConversation}
-          onNewChat={handleNewChat}
-          conversations={mappedConversations}
-        />
-
         {/* Chat Content */}
         <ScrollView
           ref={scrollViewRef}
           className="flex-1 px-4"
           contentContainerStyle={{ paddingBottom: 20 }}
-          onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          onContentSizeChange={() => {
+            // Only scroll on size change if we are in auto-scroll mode 
+            // AND it's not the initial mounting content size change (unless history loaded)
+            if (shouldAutoScroll && chatMessages.length > 0) {
+              scrollViewRef.current?.scrollToEnd({ animated: false });
+            }
+          }}
         >
           {chatMessages.length === 0 ? (
             <View className="items-center justify-center mt-40">
@@ -250,6 +265,14 @@ export default function MentorChatScreen() {
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      <HistorySidebar
+        isVisible={isSidebarVisible}
+        onClose={() => setIsSidebarVisible(false)}
+        onSelectItem={handleSelectConversation}
+        onNewChat={handleNewChat}
+        conversations={mappedConversations}
+      />
     </ThemedView>
   );
 }
