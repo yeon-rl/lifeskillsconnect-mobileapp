@@ -1,3 +1,4 @@
+import { CertificateModal } from "@/components/CertificateModal";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useThemedColors } from "@/hooks/use-themed-colors";
@@ -24,11 +25,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { toast } from 'sonner-native';
+import { CourseProp, Resource, Assessment, userCourseProp } from '@/store/courseStore';
 
 // --- Types ---
 type Tab = "lessons" | "resources" | "reviews";
 
-interface Lesson {
+interface LocalLesson {
   id: string;
   title: string;
   duration: string;
@@ -36,13 +38,24 @@ interface Lesson {
   isSectionHeader?: boolean;
 }
 
-interface Resource {
+interface LocalUIResource {
   id: string;
   title: string;
   content: string;
 }
 
-interface Review {
+interface LocalLessonResource extends LocalUIResource {
+  status: 'completed' | 'not-started' | 'locked' | 'in-progress' | 'current';
+  url?: string;
+  has_quiz?: boolean;
+  duration?: string;
+  progress?: {
+    is_completed: number;
+    watched_duration: number;
+  };
+}
+
+interface LocalReview {
   id: string;
   user: string;
   rating: number;
@@ -98,6 +111,12 @@ const CheckCircleIcon = ({ color }: { color: string }) => (
   </Svg>
 );
 
+const XCircleIcon = ({ color }: { color: string }) => (
+  <Svg width="20" height="20" viewBox="0 0 24 24" fill={color}>
+     <Path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z" />
+  </Svg>
+);
+
 const ChevronDownIcon = ({ color }: { color: string }) => (
     <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <Path d="M6 9l6 6 6-6" />
@@ -139,7 +158,7 @@ export default function ModuleDetailScreen() {
 
   
   // State for Lessons/Resources
-  const [lessons, setLessons] = useState<any[]>([]);
+  const [lessons, setLessons] = useState<LocalLessonResource[]>([]);
   const [currentLessonId, setCurrentLessonId] = useState<string | null>(null);
 
   // --- Resource Quiz State ---
@@ -163,6 +182,10 @@ export default function ModuleDetailScreen() {
   const [assessmentSelectedOption, setAssessmentSelectedOption] = useState<number | null>(null);
   const [expandedResource, setExpandedResource] = useState<string | null>(null);
   const [isReviewing, setIsReviewing] = useState(false);
+  
+  // --- Timer State for "Mark Complete" ---
+  const [resourceViewTime, setResourceViewTime] = useState(0);
+  const [canMarkComplete, setCanMarkComplete] = useState(false);
 
   const allResourcesWatched = useMemo(() => {
     return lessons.length > 0 && lessons.every(l => l.status === 'completed');
@@ -170,8 +193,14 @@ export default function ModuleDetailScreen() {
 
   const isCoursePassed = useMemo(() => {
     const userCourse = getUserCourseById(id?.toString() || "");
-    return !!(assessmentResult?.course_completed || userCourse?.assessment_status?.is_passed);
-  }, [assessmentResult, id, getUserCourseById]);
+    const courseDetail = fetchedCourse?.course || fetchedCourse;
+    const courseAssessments = Array.isArray(courseDetail?.assessments) 
+      ? courseDetail.assessments 
+      : (courseDetail?.assessments ? [courseDetail.assessments] : []);
+    const anyAssessmentPassed = courseAssessments.some((a: any) => a.is_passed === 1 || a.is_passed === true);
+
+    return !!(assessmentResult?.course_completed || userCourse?.assessment_status?.is_passed || anyAssessmentPassed);
+  }, [assessmentResult, id, getUserCourseById, fetchedCourse]);
 
 
   // --- Resource Tracking ---
@@ -191,12 +220,40 @@ export default function ModuleDetailScreen() {
   const [isVideoLoading, setIsVideoLoading] = useState(false);
   const [shouldVideoPlay, setShouldVideoPlay] = useState(false);
   const [showCompletionOverlay, setShowCompletionOverlay] = useState(false);
+  const [showCertificateModal, setShowCertificateModal] = useState(false);
 
   useEffect(() => {
     if (currentLessonId) {
       setCurrentResourceId(Number(currentLessonId));
+      // Reset timer when lesson changes
+      setResourceViewTime(0);
+      setCanMarkComplete(false);
     }
   }, [currentLessonId]);
+
+  // --- Timer Effect ---
+  useEffect(() => {
+    let interval: any = null;
+    
+    if (status.isLoaded && status.isPlaying && !canMarkComplete) {
+      interval = setInterval(() => {
+        setResourceViewTime(prev => {
+          const next = prev + 1;
+          if (next >= 30) { // 30 seconds
+            setCanMarkComplete(true);
+            if (interval) clearInterval(interval);
+          }
+          return next;
+        });
+      }, 1000);
+    } else if (status.isLoaded && !status.isPlaying && interval) {
+      clearInterval(interval);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [(status as any).isLoaded, (status as any).isPlaying, canMarkComplete]);
 
   // Update local lessons state when course is fetched
   useEffect(() => {
@@ -418,7 +475,7 @@ export default function ModuleDetailScreen() {
       }
   };
   // --- Logic ---
-    const updateLessonStatus = (lessonId: string, newStatus: string) => {
+    const updateLessonStatus = (lessonId: string, newStatus: LocalLessonResource['status']) => {
         setLessons(prevLessons => prevLessons.map(l => 
             l.id === lessonId ? { ...l, status: newStatus } : l
         ));
@@ -427,8 +484,8 @@ export default function ModuleDetailScreen() {
     const handlePlaybackStatusUpdate = async (newStatus: AVPlaybackStatus) => {
         setStatus(newStatus);
         if (!newStatus.isLoaded) {
-            if (newStatus.error) {
-                console.error(`Encountered a fatal error during playback: ${newStatus.error}`);
+            if ('error' in newStatus && (newStatus as any).error) {
+                console.error(`Encountered a fatal error during playback: ${(newStatus as any).error}`);
             }
             return;
         }
@@ -448,41 +505,38 @@ export default function ModuleDetailScreen() {
 
         if (newStatus.didJustFinish) {
             const currentIndex = lessons.findIndex(l => l.id === currentLessonId);
-            const nextIndex = currentIndex + 1;
+            const currentLesson = lessons[currentIndex];
             
-            setLessons(prevLessons => {
-                const newLessons = [...prevLessons];
-                newLessons[currentIndex] = { ...newLessons[currentIndex], status: 'completed' };
-                if (nextIndex < newLessons.length) {
-                    newLessons[nextIndex] = { ...newLessons[nextIndex], status: 'in-progress' };
-                }
-                return newLessons;
-            });
-            
-            if (nextIndex < lessons.length) {
-                const currentLesson = lessons[currentIndex];
-                if (currentLesson.has_quiz) {
-                    setShouldVideoPlay(false);
-                    setActiveQuizResource(currentLesson);
-                    setShowResourceQuizInstructions(true);
-                } else {
+            if (currentLesson.has_quiz) {
+                setShouldVideoPlay(false);
+                setActiveQuizResource(currentLesson);
+                setShowResourceQuizInstructions(true);
+            } else {
+                // No quiz - mark as completed and move to next
+                const nextIndex = currentIndex + 1;
+                setLessons(prevLessons => {
+                    const newLessons = [...prevLessons];
+                    newLessons[currentIndex] = { ...newLessons[currentIndex], status: 'completed' };
+                    if (nextIndex < newLessons.length) {
+                        newLessons[nextIndex] = { ...newLessons[nextIndex], status: 'in-progress' };
+                    }
+                    return newLessons;
+                });
+
+                if (nextIndex < lessons.length) {
                     setShowLoader(true);
                     setShouldVideoPlay(false);
                     setTimeout(() => {
                         setCurrentLessonId(lessons[nextIndex].id);
                         setShowLoader(false);
+                        setShouldVideoPlay(true);
                     }, 2000);
-                }
-            } else {
-                // Course completed
-                const currentLesson = lessons[currentIndex];
-                if (currentLesson.has_quiz) {
-                    setShouldVideoPlay(false);
-                    setActiveQuizResource(currentLesson);
-                    setShowResourceQuizInstructions(true);
                 } else {
+                    // Course completed
                     setShouldVideoPlay(false);
-                    setShowCompletionOverlay(true);
+                    if (!isCoursePassed || isReviewing) {
+                        setShowCompletionOverlay(true);
+                    }
                 }
             }
         }
@@ -502,6 +556,7 @@ export default function ModuleDetailScreen() {
         }
 
         setCurrentLessonId(lessonId);
+        setShouldVideoPlay(true);
     };
 
   // const rewind15s = () => {
@@ -525,9 +580,22 @@ export default function ModuleDetailScreen() {
   };
 
   const handleManualComplete = async (resId: string) => {
-      // Assuming we can mark current resource as complete
-      if (resId === currentLessonId) {
+      const targetLesson = lessons.find(l => l.id === resId);
+      if (!targetLesson) return;
+
+      // Check for quiz
+      if (targetLesson.has_quiz) {
+          setShouldVideoPlay(false);
+          setActiveQuizResource(targetLesson);
+          setShowResourceQuizInstructions(true);
+      } else {
+          // Mark the resource as complete in the tracking hook
           await markAsComplete();
+          
+          // Update local status
+          updateLessonStatus(resId, 'completed');
+          
+          moveToNextResource();
       }
   };
 
@@ -560,18 +628,6 @@ export default function ModuleDetailScreen() {
       }
     } catch (error) {
       console.error('Failed to start resource quiz:', error);
-    }
-  };
-
-  const handleSkipResourceQuiz = async () => {
-    if (!activeQuizResource) return;
-    
-    try {
-      await courseService.skipResourceQuiz(activeQuizResource.id);
-      setShowResourceQuizInstructions(false);
-      moveToNextResource();
-    } catch (error) {
-      console.error('Failed to skip resource quiz:', error);
     }
   };
 
@@ -650,6 +706,26 @@ export default function ModuleDetailScreen() {
       setShowAssessment(false);
       
       if (result.course_completed) {
+        // Cascade completion to all resources
+        try {
+          console.log('[ASSESSMENT] Course completed. Marking all resources as complete...');
+          await Promise.all(lessons.map(async (lesson) => {
+            if (lesson.status !== 'completed') {
+              return courseService.updateResourceProgress({
+                resourceId: Number(lesson.id),
+                userId: currentUser?.userId?.toString() || "",
+                watchedDuration: Number(lesson.duration) || 0,
+                totalDuration: Number(lesson.duration) || 0,
+                isCompleted: true
+              });
+            }
+            return Promise.resolve();
+          }));
+          console.log('[ASSESSMENT] All resources marked as complete.');
+        } catch (error) {
+          console.error('[ASSESSMENT] Failed to cascade resource completion:', error);
+        }
+
         // Refresh course list to update global state
         if (currentUser?.userId) {
           // You might want to call refetch from hook or update store directly
@@ -690,17 +766,6 @@ export default function ModuleDetailScreen() {
     setShowResourceQuiz(true);
   };
 
-  const handleSkipAfterFailure = async () => {
-    if (!activeQuizResource) return;
-    try {
-      await courseService.skipResourceQuiz(activeQuizResource.id);
-      setShowResourceQuizFailure(false);
-      moveToNextResource();
-    } catch (error) {
-      console.error('Failed to skip resource quiz after failure:', error);
-    }
-  };
-
   const moveToNextResource = () => {
     const currentIndex = lessons.findIndex(l => l.id === currentLessonId);
     const nextIndex = currentIndex + 1;
@@ -711,6 +776,7 @@ export default function ModuleDetailScreen() {
       setTimeout(() => {
         setCurrentLessonId(lessons[nextIndex].id);
         setShowLoader(false);
+        setShouldVideoPlay(true);
       }, 2000);
     } else {
       setShouldVideoPlay(false);
@@ -727,15 +793,20 @@ export default function ModuleDetailScreen() {
     const remainingAttempts = assessmentResult.remaining_attempts;
     
     return (
-      <ThemedView style={{ flex: 1, padding: 16 }}>
-        <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <ThemedView style={{ flex: 1 }}>
+        <SafeAreaView style={styles.videoHeader}>
+            <Pressable onPress={() => setAssessmentResult(null)} style={styles.videoBackButton}>
+                <BackIcon color={colors.text} />
+            </Pressable>
+        </SafeAreaView>
+        <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 }}>
           <View style={{ padding: 32, backgroundColor: colors.bglight01, borderRadius: 16, width: '100%', alignItems: 'center' }}>
             <View style={{ 
               width: 80, height: 80, borderRadius: 40, 
-              backgroundColor: isPassed ? '#E8F5E9' : '#FFEBEE', 
+              backgroundColor: isPassed ? '#34A85322' : '#D32F2F22', 
               justifyContent: 'center', alignItems: 'center', marginBottom: 24 
             }}>
-              {isPassed ? <CheckCircleIcon color="#34A853" /> : <ThemedText style={{ fontSize: 40 }}>😕</ThemedText>}
+              {isPassed ? <CheckCircleIcon color="#34A853" /> : <XCircleIcon color="#D32F2F" />}
             </View>
             
             <ThemedText type="subtitle" style={{ marginBottom: 16, textAlign: 'center', color: isPassed ? '#34A853' : '#D32F2F' }}>
@@ -757,7 +828,7 @@ export default function ModuleDetailScreen() {
                 <>
                   <Pressable 
                     onPress={() => setAssessmentResult(null)}
-                    style={[styles.primaryButton, { backgroundColor: '#527c65', width: '100%' }]}
+                    style={[styles.primaryButton, { backgroundColor: colors.primary, width: '100%' }]}
                   >
                     <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16, textAlign: 'center' }}>Continue</Text>
                   </Pressable>
@@ -944,14 +1015,8 @@ export default function ModuleDetailScreen() {
                     
                     <View style={{flexDirection: 'row', gap: 16, width: '100%'}}>
                         <Pressable 
-                            onPress={handleSkipResourceQuiz}
-                            style={[styles.primaryButton, {flex: 1, backgroundColor: 'transparent', borderWidth: 1, borderColor: '#527c65'}]}
-                        >
-                            <Text style={{color: '#527c65', fontWeight: 'bold', fontSize: 16, textAlign: 'center'}}>Skip</Text>
-                        </Pressable>
-                        <Pressable 
                             onPress={handleStartResourceQuiz}
-                            style={[styles.primaryButton, {flex: 1, backgroundColor: '#527c65'}]}
+                            style={[styles.primaryButton, {flex: 1, backgroundColor: colors.primary}]}
                         >
                             <Text style={{color: 'white', fontWeight: 'bold', fontSize: 16, textAlign: 'center'}}>Start Quiz</Text>
                         </Pressable>
@@ -983,8 +1048,8 @@ export default function ModuleDetailScreen() {
              <ThemedText style={{color: colors.textSecondary}}>Question <ThemedText style={{fontWeight: 'bold', color: '#34A853'}}>{resourceQuizQuestionIndex + 1}</ThemedText>/{quizQuestions.length}</ThemedText>
           </View>
           
-          <View style={{backgroundColor: '#527c65', padding: 20, borderRadius: 12, marginBottom: 20}}>
-             <ThemedText style={{color: 'white', fontWeight: 'bold', fontSize: 16}}>
+          <View style={{backgroundColor: colors.primary, padding: 20, borderRadius: 12, marginBottom: 20}}>
+             <ThemedText style={{color: colors.white, fontWeight: 'bold', fontSize: 16}}>
                {currentQ.question_text || currentQ.question}
              </ThemedText>
           </View>
@@ -999,7 +1064,7 @@ export default function ModuleDetailScreen() {
                   onPress={() => setResourceQuizSelectedOption(optionId)}
                   style={[
                       styles.optionCard, 
-                      resourceQuizSelectedOption === optionId && { backgroundColor: '#E8F5E9', borderColor: '#527c65', borderWidth: 1 }
+                      resourceQuizSelectedOption === optionId && { backgroundColor: '#34A85311', borderColor: colors.primary, borderWidth: 1 }
                   ]}
                >
                    <View style={[
@@ -1018,9 +1083,9 @@ export default function ModuleDetailScreen() {
           <Pressable 
              onPress={handleResourceQuizNext}
              disabled={resourceQuizSelectedOption === null}
-             style={[styles.primaryButton, {backgroundColor: '#527c65', opacity: resourceQuizSelectedOption === null ? 0.6 : 1}]}
+             style={[styles.primaryButton, {backgroundColor: colors.primary, opacity: resourceQuizSelectedOption === null ? 0.6 : 1}]}
           >
-             <Text style={{color: 'white', fontWeight: 'bold', fontSize: 16}}>
+             <Text style={{color: colors.white, fontWeight: 'bold', fontSize: 16}}>
                 {resourceQuizQuestionIndex === quizQuestions.length - 1 ? "Finish" : "Next"}
              </Text>
           </Pressable>
@@ -1034,7 +1099,7 @@ export default function ModuleDetailScreen() {
         <ThemedView style={{ flex: 1, padding: 16 }}>
             <SafeAreaView style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
                 <View style={{padding: 32, backgroundColor: colors.bglight01, borderRadius: 16, width: '100%', alignItems: 'center'}}>
-                    <View style={{width: 80, height: 80, borderRadius: 40, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center', marginBottom: 24}}>
+                    <View style={{width: 80, height: 80, borderRadius: 40, backgroundColor: '#34A85322', justifyContent: 'center', alignItems: 'center', marginBottom: 24}}>
                         <CheckCircleIcon color="#34A853" />
                     </View>
                     <ThemedText type="subtitle" style={{marginBottom: 16, textAlign: 'center'}}>
@@ -1045,9 +1110,9 @@ export default function ModuleDetailScreen() {
                     </ThemedText>
                     
                     {rewardedPoints > 0 && (
-                      <View style={{backgroundColor: '#E8F5E9', padding: 16, borderRadius: 12, marginBottom: 20, alignItems: 'center', width: '100%'}}>
+                      <View style={{backgroundColor: '#34A85311', padding: 16, borderRadius: 12, marginBottom: 20, alignItems: 'center', width: '100%'}}>
                         <ThemedText style={{color: '#34A853', fontWeight: 'bold', fontSize: 18}}>+{rewardedPoints} Points Awarded!</ThemedText>
-                        <ThemedText style={{color: '#527c65', fontSize: 12}}>Successfully Added to your account</ThemedText>
+                        <ThemedText style={{color: colors.primary, fontSize: 12}}>Successfully Added to your account</ThemedText>
                       </View>
                     )}
 
@@ -1057,7 +1122,7 @@ export default function ModuleDetailScreen() {
                            New Balance: <ThemedText style={{ fontWeight: 'bold' }}>{quizResult.newTotal} pts</ThemedText>
                          </ThemedText>
                          {quizResult.newLevel && (
-                           <ThemedText style={{ color: '#527c65', fontWeight: 'bold', fontSize: 16, marginTop: 4 }}>
+                           <ThemedText style={{ color: colors.primary, fontWeight: 'bold', fontSize: 16, marginTop: 4 }}>
                              Level Up: {quizResult.newLevel}
                            </ThemedText>
                          )}
@@ -1065,13 +1130,29 @@ export default function ModuleDetailScreen() {
                     )}
                     
                     <Pressable 
-                        onPress={() => {
+                        onPress={async () => {
                             setShowResourceQuizSuccess(false);
+                            
+                            // Mark current resource as complete AFTER passing the quiz
+                            await markAsComplete();
+                            
+                            const currentIndex = lessons.findIndex(l => l.id === currentLessonId);
+                            const nextIndex = currentIndex + 1;
+                            
+                            setLessons(prevLessons => {
+                                const newLessons = [...prevLessons];
+                                newLessons[currentIndex] = { ...newLessons[currentIndex], status: 'completed' };
+                                if (nextIndex < newLessons.length) {
+                                    newLessons[nextIndex] = { ...newLessons[nextIndex], status: 'in-progress' };
+                                }
+                                return newLessons;
+                            });
+
                             moveToNextResource();
                         }}
-                        style={[styles.primaryButton, {backgroundColor: '#527c65', width: '100%'}]}
+                        style={[styles.primaryButton, {backgroundColor: colors.primary, width: '100%'}]}
                     >
-                        <Text style={{color: 'white', fontWeight: 'bold', fontSize: 16, textAlign: 'center'}}>Continue</Text>
+                        <Text style={{color: colors.white, fontWeight: 'bold', fontSize: 16, textAlign: 'center'}}>Continue</Text>
                     </Pressable>
                 </View>
             </SafeAreaView>
@@ -1097,16 +1178,9 @@ export default function ModuleDetailScreen() {
                     <View style={{ gap: 16, width: '100%' }}>
                         <Pressable 
                             onPress={handleRetakeQuiz}
-                            style={[styles.primaryButton, {backgroundColor: '#527c65', width: '100%'}]}
+                            style={([styles.primaryButton, {backgroundColor: '#527c65', width: '100%'}] as any)}
                         >
                             <Text style={{color: 'white', fontWeight: 'bold', fontSize: 16, textAlign: 'center'}}>Take Quiz Again</Text>
-                        </Pressable>
-
-                        <Pressable 
-                            onPress={handleSkipAfterFailure}
-                            style={[styles.primaryButton, {backgroundColor: 'transparent', borderWidth: 1, borderColor: '#527c65', width: '100%'}]}
-                        >
-                            <Text style={{color: '#527c65', fontWeight: 'bold', fontSize: 16, textAlign: 'center'}}>Skip Quiz</Text>
                         </Pressable>
                     </View>
                 </View>
@@ -1118,9 +1192,15 @@ export default function ModuleDetailScreen() {
   return (
     <ThemedView style={{ flex: 1 }}>
       {/* Custom Header Area (Video Player or Passed State) */}
-      <Pressable onPress={() => (!isCoursePassed || isReviewing) && setShowControls(!showControls)} style={[{ backgroundColor: 'black', position: 'relative' }, isFullscreen ? { width: '100%', height: '100%', position: 'absolute', zIndex: 999 } : { height: 300 }]}>
+      <Pressable onPress={() => (!isCoursePassed || isReviewing) && setShowControls(!showControls)} style={[{ backgroundColor: 'black', position: 'relative' }, (isFullscreen ? { width: '100%', height: '100%', position: 'absolute', zIndex: 999 } : { height: 300 }) as any]}>
         {isCoursePassed && !isReviewing ? (
           <View style={[StyleSheet.absoluteFillObject, { justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: '#1A1A1A' }]}>
+            <SafeAreaView style={[styles.videoHeader, { top: 10 }]}>
+                <Pressable onPress={handleBack} style={styles.videoBackButton}>
+                    <BackIcon color="white" />
+                </Pressable>
+            </SafeAreaView>
+
             <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: '#34A85322', justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
               <CheckCircleIcon color="#34A853" />
             </View>
@@ -1134,20 +1214,18 @@ export default function ModuleDetailScreen() {
               <Pressable 
                 onPress={() => {
                   setIsReviewing(true);
-                  setCurrentLessonId(lessons[0].id);
+                  setCurrentLessonId(lessons[0]?.id || "");
                 }}
-                style={[styles.primaryButton, { paddingHorizontal: 20, paddingVertical: 12, backgroundColor: 'transparent', borderWidth: 1, borderColor: 'white' }]}
+                style={[styles.primaryButton, { paddingHorizontal: 20, paddingVertical: 12, backgroundColor: 'transparent', borderWidth: 1, borderColor: 'white' } as any]}
               >
                 <Text style={{ color: 'white', fontWeight: 'bold' }}>Rewatch Videos</Text>
               </Pressable>
-              {course.has_certificate === 1 && (
-                <Pressable 
-                  onPress={() => { /* Logic to view certificate */ }}
-                  style={[styles.primaryButton, { paddingHorizontal: 20, paddingVertical: 12 }]}
-                >
-                  <Text style={{ color: 'white', fontWeight: 'bold' }}>View Certificate</Text>
-                </Pressable>
-              )}
+              <Pressable 
+                onPress={() => setShowCertificateModal(true)}
+                style={[styles.primaryButton, { paddingHorizontal: 20, paddingVertical: 12, backgroundColor: colors.primary } as any]}
+              >
+                <Text style={{ color: 'white', fontWeight: 'bold' }}>View Certificate</Text>
+              </Pressable>
             </View>
           </View>
         ) : (
@@ -1166,7 +1244,7 @@ export default function ModuleDetailScreen() {
                   if (status.isLoaded && videoRef.current) {
                       // Get the most up-to-date progress from the store
                       const userCourse = getUserCourseById(id?.toString() || "");
-                      const userRes = userCourse?.course.resources.find((ur: any) => ur.id.toString() === currentLessonId);
+                      const userRes = userCourse?.course?.resources?.find((ur: any) => ur.id.toString() === currentLessonId);
                       
                       const savedProgress = userRes?.progress?.watched_duration || currentLesson?.progress?.watched_duration;
                       const lastPosition = savedProgress ? Number(savedProgress) * 1000 : 0;
@@ -1237,7 +1315,7 @@ export default function ModuleDetailScreen() {
                             value={status.isLoaded ? status.positionMillis : 0}
                             onSlidingComplete={handleSeek}
                             minimumTrackTintColor="#FFFFFF"
-                            maximumTrackTintColor="#rgba(255, 255, 255, 0.5)"
+                            maximumTrackTintColor="rgba(255, 255, 255, 0.5)"
                             thumbTintColor="#FFFFFF"
                         />
                          <Text style={{color: 'white', fontSize: 12}}>
@@ -1256,35 +1334,49 @@ export default function ModuleDetailScreen() {
         {/* Completion Overlay */}
         {showCompletionOverlay && (
             <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', zIndex: 20 }]}>
+                <SafeAreaView style={[styles.videoHeader, { top: 10 }]}>
+                    <Pressable onPress={() => setShowCompletionOverlay(false)} style={styles.videoBackButton}>
+                        <BackIcon color="white" />
+                    </Pressable>
+                </SafeAreaView>
+
                 <View style={{ width: '80%', alignItems: 'center', padding: 20 }}>
                     <Text style={{ color: 'white', fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 }}>
-                        Congratulations!
+                        {isCoursePassed ? "Module Completed!" : "Congratulations!"}
                     </Text>
                     <Text style={{ color: '#ccc', fontSize: 14, textAlign: 'center', marginBottom: 24 }}>
-                        You have completed this course. You can take the assessment or rewatch the videos.
+                        {isCoursePassed 
+                            ? "You have already completed this course successfully." 
+                            : "You have completed this course. You can take the assessment or rewatch the videos."}
                     </Text>
                     
                     <View style={{ gap: 12, width: '100%' }}>
                         <Pressable 
                             onPress={() => {
                                 setShowCompletionOverlay(false);
-                                startAssessment();
+                                if (isCoursePassed) {
+                                    setShowCertificateModal(true);
+                                } else {
+                                    startAssessment();
+                                }
                             }}
-                            style={[styles.primaryButton, { backgroundColor: '#527c65', width: '100%' }]}
+                            style={[styles.primaryButton, { backgroundColor: colors.primary, width: '100%' } as any]}
                         >
-                            <Text style={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>Take Assessment</Text>
+                            <Text style={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>
+                                {isCoursePassed ? "View Certificate" : "Take Assessment"}
+                            </Text>
                         </Pressable>
                         
                         <Pressable 
                             onPress={() => {
                                 setShowCompletionOverlay(false);
                                 setIsReviewing(true);
-                                setCurrentLessonId(lessons[0].id);
+                                setCurrentLessonId(lessons[0]?.id || "");
                                 if (videoRef.current) {
                                     videoRef.current.setPositionAsync(0);
                                 }
                             }}
-                            style={[styles.primaryButton, { backgroundColor: 'transparent', borderWidth: 1, borderColor: 'white', width: '100%' }]}
+                            style={([styles.primaryButton, { backgroundColor: 'transparent', borderWidth: 1, borderColor: 'white', width: '100%' }] as any)}
                         >
                             <Text style={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>Rewatch Videos</Text>
                         </Pressable>
@@ -1293,6 +1385,16 @@ export default function ModuleDetailScreen() {
             </View>
         )}
       </Pressable>
+      
+      {/* Certificate Modal */}
+      <CertificateModal
+        visible={showCertificateModal}
+        onClose={() => setShowCertificateModal(false)}
+        courseName={course.title}
+        studentName={currentUser?.fullname || "User"}
+        date={new Date().toLocaleDateString()}
+        certificateImage={assessmentResult?.certificate_image || course.thumbnail}
+      />
       
       {/* Instruction Modal for First-time Enrollment */}
       <Modal
@@ -1322,7 +1424,7 @@ export default function ModuleDetailScreen() {
                 
                 <Pressable 
                     onPress={() => setShowEnrolledModal(false)}
-                    style={[styles.instructionButton, { backgroundColor: colors.primary }]}
+                    style={([styles.instructionButton, { backgroundColor: colors.primary }] as any)}
                 >
                     <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>Continue</Text>
                 </Pressable>
@@ -1353,7 +1455,7 @@ export default function ModuleDetailScreen() {
                   onPress={() => router.push(`/course-chat/${id}`)}
                   style={styles.messageBtn}
                 >
-                    <Text style={{color: 'white', cursor: 'pointer'}}>Chat</Text>
+                    <Text style={{color: 'white' }}>Chat</Text>
                 </Pressable>
            </View>
            
@@ -1368,7 +1470,7 @@ export default function ModuleDetailScreen() {
               </View>
               <View style={styles.statItem}>
                 <Svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                  <Path d="M8.1775 13.2533L7.5 15.625L6.8225 13.2533C6.64739 12.6407 6.31908 12.0828 5.86855 11.6323C5.41802 11.1818 4.86012 10.8534 4.2475 10.6783L1.875 10L4.24667 9.3225C4.85928 9.14739 5.41718 8.81908 5.86772 8.36855C6.31825 7.91802 6.64656 7.36012 6.82167 6.7475L7.5 4.375L8.1775 6.74667C8.35261 7.35928 8.68092 7.91718 9.13145 8.36772C9.58198 8.81825 10.1399 9.14656 10.7525 9.32167L13.125 10L10.7533 10.6775C10.1407 10.8526 9.58282 11.1809 9.13228 11.6315C8.68175 12.082 8.35344 12.6399 8.17833 13.2525L8.1775 13.2533ZM15.2158 7.2625L15 8.125L14.7842 7.2625C14.6606 6.76799 14.405 6.31635 14.0447 5.95586C13.6843 5.59537 13.2328 5.33958 12.7383 5.21583L11.875 5L12.7383 4.78417C13.2328 4.66042 13.6843 4.40463 14.0447 4.04414C14.405 3.68365 14.6606 3.23201 14.7842 2.7375L15 1.875L15.2158 2.7375C15.3394 3.23211 15.5952 3.68382 15.9557 4.04432C16.3162 4.40482 16.7679 4.66056 17.2625 4.78417L18.125 5L17.2625 5.21583C16.7679 5.33944 16.3162 5.59518 15.9557 5.95568C15.5952 6.31618 15.3394 6.76789 15.2158 7.2625ZM14.0783 17.1392L13.75 18.125L13.4217 17.1392C13.3296 16.863 13.1745 16.6121 12.9687 16.4063C12.7629 16.2005 12.512 16.0454 12.2358 15.9533L11.25 15.625L12.2358 15.2967C12.512 15.2046 12.7629 15.0495 12.9687 14.8437C13.1745 14.6379 13.3296 14.387 13.4217 14.1108L13.75 13.125L14.0783 14.1108C14.1704 14.387 14.3255 14.6379 14.5313 14.8437C14.7371 15.0495 14.988 15.2046 15.2642 15.2967L16.25 15.625L15.2642 15.9533C14.988 16.0454 14.7371 16.2005 14.5313 16.4063C14.3255 16.6121 14.1704 16.863 14.0783 17.1392Z" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  <Path d="M8.1775 13.2533L7.5 15.625L6.8225 13.2533C6.64739 12.6407 6.31908 12.0828 5.86855 11.6323C5.41802 11.1818 4.86012 10.8534 4.2475 10.6783L1.875 10L4.24667 9.3225C4.85928 9.14739 5.41718 8.81908 5.86772 8.36855C6.31825 7.91802 6.64656 7.36012 6.82167 6.7475L7.5 4.375L8.1775 6.74667C8.35261 7.35928 8.68092 7.91718 9.13145 8.36772C9.58198 8.81825 10.1399 9.14656 10.7525 9.32167L13.125 10L10.7533 10.6775C10.1407 10.8526 9.58282 11.1809 9.13228 11.6315C8.68175 12.082 8.35344 12.6399 8.17833 13.2525L8.1775 13.2533ZM15.2158 7.2625L15 8.125L14.7842 7.2625C14.6606 6.76799 14.405 6.31635 14.0447 5.95586C13.6843 5.59537 13.2328 5.33958 12.7383 5.21583L11.875 5L12.7383 4.78417C13.2328 4.66042 13.6843 4.40463 14.0447 4.04414C14.405 3.68365 14.6606 3.23201 14.7842 2.7375L15 1.875L15.2158 2.7375C15.3394 3.23211 15.5952 3.68382 15.9557 4.04432C16.3162 4.40482 16.7679 4.66056 17.2625 4.78417L18.125 5L17.2625 5.21583C16.7679 5.33944 16.3162 5.59518 15.9557 5.95568C15.5952 6.31618 15.3394 6.76789 15.2158 7.2625ZM14.0783 17.1392L13.75 18.125L13.4217 17.1392C13.3296 16.863 13.1745 16.6121 12.9687 16.4063C12.7629 16.2005 12.512 16.0454 12.2358 15.9533L11.25 15.625L12.2358 15.2967C12.512 15.2046 12.7629 15.0495 12.9687 14.8437C13.1745 14.6379 13.3296 14.387 13.4217 14.1108L13.75 13.125L14.0783 14.1108C14.1704 14.387 14.3255 14.6379 14.5313 14.8437C14.7371 15.0495 14.988 15.2046 15.2642 15.2967L16.25 15.625L15.2642 15.9533C14.988 16.0454 14.7371 16.2005 14.5313 16.4063C14.3255 16.6121 14.1704 16.863 14.0783 17.1392Z" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                 </Svg>
                 <ThemedText type="small">15 Points</ThemedText>
               </View>
@@ -1402,7 +1504,7 @@ export default function ModuleDetailScreen() {
                {course.description}
            </ThemedText>
            <Pressable onPress={() => setIsDescriptionExpanded(!isDescriptionExpanded)} style={{ marginBottom: 20 }}>
-                <Text style={{color: '#5A7C65', fontWeight: 'bold'}} className="text-sm">
+                <Text style={{color: '#5A7C65', fontWeight: 'bold', fontSize: 14}}>
                     {isDescriptionExpanded ? "See Less" : "See More"}
                 </Text>
            </Pressable>
@@ -1471,8 +1573,20 @@ export default function ModuleDetailScreen() {
                             </ThemedText>
                             <View style={{flex: 1}}>
                                 <ThemedText style={{fontWeight: '600'}}>{lesson.title}</ThemedText>
-                                {lesson.duration ? <Text style={{color: colors.textSecondary, fontSize: 12}}>Videos - {lesson.duration}</Text> : null}
-                            </View>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                  {lesson.duration ? <Text style={{color: colors.textSecondary, fontSize: 12}}>Videos - {lesson.duration}</Text> : null}
+                                  
+                                  {/* Mark Complete Button for active lesson after 30 secs */}
+                                  {currentLessonId === lesson.id && canMarkComplete && lesson.status !== 'completed' && (
+                                    <Pressable 
+                                      onPress={() => handleManualComplete(lesson.id)}
+                                      style={{ backgroundColor: colors.primary + '22', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: colors.primary }}
+                                    >
+                                      <Text style={{ color: colors.primary, fontSize: 10, fontWeight: 'bold' }}>Mark Complete</Text>
+                                    </Pressable>
+                                  )}
+                                </View>
+                             </View>
                             {lesson.status === 'completed' ? 
                                 <Svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                                     <Path d="M15.8255 15.8327H15.8334H15.8255ZM15.8255 15.8327C15.3066 16.3473 14.3662 16.2191 13.7067 16.2191C12.8972 16.2191 12.5073 16.3774 11.9296 16.9552C11.4377 17.4472 10.7782 18.3327 10.0001 18.3327C9.222 18.3327 8.5625 17.4472 8.07056 16.9552C7.49282 16.3774 7.10299 16.2191 6.29346 16.2191C5.63398 16.2191 4.69356 16.3473 4.17466 15.8327C3.65159 15.314 3.78031 14.3697 3.78031 13.7059C3.78031 12.8672 3.59688 12.4815 2.99956 11.8842C2.11103 10.9957 1.66676 10.5513 1.66675 9.99935C1.66676 9.44727 2.11101 9.00302 2.99954 8.11449C3.53275 7.58128 3.78031 7.05292 3.78031 6.29273C3.78031 5.63322 3.65216 4.6928 4.16675 4.17388C4.68544 3.65083 5.62975 3.77957 6.29348 3.77957C7.05364 3.77957 7.58201 3.53202 8.11521 2.99882C9.00375 2.11028 9.448 1.66602 10.0001 1.66602C10.5522 1.66602 10.9964 2.11028 11.8849 2.99882C12.418 3.53191 12.9463 3.77957 13.7067 3.77957C14.3662 3.77957 15.3067 3.65141 15.8256 4.16602C16.3486 4.68471 16.2198 5.62901 16.2198 6.29273C16.2198 7.1315 16.4033 7.51716 17.0006 8.11449C17.8892 9.00302 18.3334 9.44727 18.3334 9.99935C18.3334 10.5513 17.8892 10.9957 17.0006 11.8842C16.4032 12.4815 16.2198 12.8672 16.2198 13.7059C16.2198 14.3697 16.3486 15.314 15.8255 15.8327Z" fill="#34A853"/>
@@ -1491,15 +1605,17 @@ export default function ModuleDetailScreen() {
                  })}
                  {/* Simulate finish course button for demo */}
                  <Pressable 
-                    onPress={handleFinishCourse} 
-                    disabled={!lessons.every(l => l.status === 'completed')}
+                    onPress={isCoursePassed ? () => setShowCertificateModal(true) : handleFinishCourse} 
+                    disabled={(!lessons.every(l => l.status === 'completed')) && !isCoursePassed}
                     style={[
                         styles.primaryButton, 
                         {marginTop: 20},
-                        !lessons.every(l => l.status === 'completed') && { opacity: 0.5, backgroundColor: '#ccc' }
+                        (!lessons.every(l => l.status === 'completed') && !isCoursePassed) && { opacity: 0.5, backgroundColor: '#ccc' }
                     ]}
                  >
-                     <Text style={{color: 'white', textAlign: 'center'}}>Take Assessment</Text>
+                     <Text style={{color: 'white', textAlign: 'center'}}>
+                        {isCoursePassed ? "View Certificate" : "Take Assessment"}
+                     </Text>
                  </Pressable>
                </View>
            )}
@@ -1540,8 +1656,8 @@ export default function ModuleDetailScreen() {
                <View>
                    {course.reviews.map((review: any) => (
                        <View key={review.id} style={{marginBottom: 20, flexDirection: 'column', gap: 12}}>
-                          <View className="flex flex-row items-center gap-3">
-                           <View style={{width: 40, height: 40, borderRadius: '100%', backgroundColor: '#ddd'}} className="overflow-hidden">
+                          <View style={{flexDirection: 'row', alignItems: 'center', gap: 12}}>
+                           <View style={{width: 40, height: 40, borderRadius: 20, backgroundColor: '#ddd', overflow: 'hidden'}}>
                             <Image
                               source={review.avatar}
                               style={{

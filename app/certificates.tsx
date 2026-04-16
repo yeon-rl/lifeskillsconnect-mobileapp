@@ -5,14 +5,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  Image,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Image,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
@@ -115,6 +115,7 @@ export default function Certificates() {
         onClose={() => setModalVisible(false)}
         courseName={selectedCertificate?.course?.title}
         date={selectedCertificate?.subscribed_at ? new Date(selectedCertificate.subscribed_at).toLocaleDateString() : undefined}
+        certificateImage={(selectedCertificate as any)?.course?.thumbnail} // Placeholder until real image is available
       />
     </View>
 

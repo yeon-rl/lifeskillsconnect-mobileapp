@@ -81,17 +81,7 @@ export const authService = {
     }
   },
 
-  /**
-   * Google authentication
-   */
-  googleAuth: async (data: { token: string }) => {
-    try {
-      const response = await apiClient.post("/auth/google", data);
-      return response.data;
-    } catch (error) {
-      throw error;
-    }
-  },
+
 
   /**
    * Apple authentication
@@ -243,7 +233,8 @@ export const courseService = {
       
       console.log('[API] POST /progress/track-resource payload:', JSON.stringify(payload, null, 2));
 
-      const response = await apiClient.post('/progress/track-resource', payload);
+      // @ts-ignore - custom config property to skip global loader (silent background tracking)
+      const response = await apiClient.post('/progress/track-resource', payload, { skipGlobalLoader: true });
       
       console.log('[API] POST /progress/track-resource response:', JSON.stringify(response.data, null, 2));
       return response.data;

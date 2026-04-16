@@ -1,31 +1,32 @@
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useThemedColors } from "@/hooks/use-themed-colors";
+import { useUserStore } from "@/store/userStore";
 import {
-    getChatHistory,
-    sendSupportMessage,
-    startAnonymousChat
+  getChatHistory,
+  sendSupportMessage,
+  startAnonymousChat
 } from "@/utils/api";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    TextInput,
-    TouchableOpacity,
-    View
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 import Animated, {
-    useAnimatedStyle,
-    useSharedValue,
-    withDelay,
-    withRepeat,
-    withSequence,
-    withTiming
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
@@ -75,6 +76,7 @@ interface Message {
 export default function AnonymousChatScreen() {
   const colors = useThemedColors();
   const router = useRouter();
+  const { currentUser } = useUserStore();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [chatId, setChatId] = useState<string | null>(null);
@@ -403,7 +405,7 @@ export default function AnonymousChatScreen() {
 
               <View className="items-center gap-3">
                 <ThemedText type="title" className="text-center" style={{color: "#5A7C64", fontWeight: 500}}>
-                  Hi Zeeno! 👋🏻
+                  Hi {currentUser?.username || "there"}! 👋🏻
                 </ThemedText>
                 
                 <ThemedText type="small14" className="text-base text-center leading-7 px-4">

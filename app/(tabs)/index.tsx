@@ -26,54 +26,66 @@ export default function HomeScreen() {
   const { currentUser } = useUserStore();
 
   // Fetch all courses and store in Zustand (with caching)
-  const { courses: coursesData, isLoading: coursesLoading, error: coursesError } = useFetchCourses();
-  const courses = React.useMemo(() => coursesData?.courses || [], [coursesData]);
+  const {
+    courses: coursesData,
+    isLoading: coursesLoading,
+    error: coursesError,
+  } = useFetchCourses();
+  const courses = React.useMemo(
+    () => coursesData?.courses || [],
+    [coursesData],
+  );
 
   // Fetch user's enrolled courses
-  const { userCourses, isLoading: userCoursesLoading, error: userCoursesError } = useFetchUserCourses(currentUser?.id);
+  const {
+    userCourses,
+    isLoading: userCoursesLoading,
+    error: userCoursesError,
+  } = useFetchUserCourses(currentUser?.id);
 
   // Get up to 5 random ongoing courses
   const randomizedOngoingCourses = React.useMemo(() => {
     if (!userCourses?.subscriptions) return [];
-    
+
     // Filter for ongoing courses
     const ongoing = userCourses.subscriptions.filter(
-      (sub: any) => sub.status !== "completed"
+      (sub: any) => sub.status !== "completed",
     );
 
     // Shuffle and pick up to 5
-    return [...ongoing]
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 5);
+    return [...ongoing].sort(() => Math.random() - 0.5).slice(0, 5);
   }, [userCourses]);
 
   // Get up to 5 random courses
   const randomizedCourses = React.useMemo(() => {
     if (!courses) return [];
-    
+
     // Filter for ongoing courses
-    const course = courses.filter(
-      (sub: any) => sub.status !== "completed"
-    );
+    const course = courses.filter((sub: any) => sub.status !== "completed");
 
     // Shuffle and pick up to 5
-    return [...course]
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 5);
+    return [...course].sort(() => Math.random() - 0.5).slice(0, 5);
   }, [courses]);
 
+  const ongoingCoursesCount = React.useMemo(
+    () =>
+      userCourses?.subscriptions?.filter(
+        (sub: any) => sub.status !== "completed",
+      ).length || 0,
+    [userCourses],
+  );
 
-  const ongoingCoursesCount = React.useMemo(() => 
-    userCourses?.subscriptions?.filter((sub: any) => sub.status !== "completed").length || 0
-  , [userCourses]);
-
-  const completedCoursesCount = React.useMemo(() => 
-    userCourses?.subscriptions?.filter((sub: any) => sub.status === "completed").length || 0
-  , [userCourses]);
+  const completedCoursesCount = React.useMemo(
+    () =>
+      userCourses?.subscriptions?.filter(
+        (sub: any) => sub.status === "completed",
+      ).length || 0,
+    [userCourses],
+  );
 
   return (
     <ThemedView style={{ flex: 1 }} className="px-4">
-      <SafeAreaView edges={["top"]} style={{marginBottom: 12}}>
+      <SafeAreaView edges={["top"]} style={{ marginBottom: 12 }}>
         {/* User Header */}
         <UserHeader />
       </SafeAreaView>
@@ -223,16 +235,24 @@ export default function HomeScreen() {
                         progress={sub.progress || 0}
                         isPremium={sub.course.is_paid === 1}
                         image={sub.course.thumbnail}
-                        onContinue={() => router.push(`/module-detail/${sub.course.id}`)}
+                        onContinue={() =>
+                          router.push(`/module-detail/${sub.course.id}`)
+                        }
                       />
-                      {index < randomizedOngoingCourses.length - 1 && <View className="w-3" />}
+                      {index < randomizedOngoingCourses.length - 1 && (
+                        <View className="w-3" />
+                      )}
                     </React.Fragment>
                   ))}
                 </ScrollView>
               ) : (
                 <View className="h-[200px] justify-center items-center bg-gray-100 rounded-2xl p-4">
-                  <ThemedText type="small14" className="text-center text-gray-500">
-                    You haven't started any modules yet. Explore new courses to begin!
+                  <ThemedText
+                    type="small14"
+                    className="text-center text-gray-500"
+                  >
+                    You haven&apos;t started any modules yet. Explore new
+                    courses to begin!
                   </ThemedText>
                 </View>
               )}
@@ -312,7 +332,10 @@ export default function HomeScreen() {
                       className="mt-2"
                       style={{ color: colors.white }}
                     >
-                      {currentUser?.total_points ? currentUser?.total_points : 0} pts
+                      {currentUser?.total_points
+                        ? currentUser?.total_points
+                        : 0}{" "}
+                      pts
                     </ThemedText>
                   </View>
                   <Pressable onPress={() => router.push("/reward-points")}>
@@ -352,19 +375,19 @@ export default function HomeScreen() {
                 decelerationRate="fast"
                 snapToInterval={300}
               >
-                {
-                  randomizedCourses.map((course, idx) => {
-                    return (
-                      <CardComponent2
-                        key={idx}
-                        title={course.title}
-                        isPremium={course.is_paid === 1}
-                        image={course.thumbnail}
-                        onViewModule={() => router.push(`/all-module-detail/${course.id}`)}
-                      />
-                    )
-                  })
-                }
+                {randomizedCourses.map((course, idx) => {
+                  return (
+                    <CardComponent2
+                      key={idx}
+                      title={course.title}
+                      isPremium={course.is_paid === 1}
+                      image={course.thumbnail}
+                      onViewModule={() =>
+                        router.push(`/all-module-detail/${course.id}`)
+                      }
+                    />
+                  );
+                })}
               </ScrollView>
             </View>
           </View>

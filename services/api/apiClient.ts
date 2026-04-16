@@ -25,9 +25,10 @@ apiClient.interceptors.request.use(
     }
     
     // Add Auth Token from userStore if available
-    const { authToken } = useUserStore.getState();
+    const { authToken, updateLastActive } = useUserStore.getState();
     if (authToken) {
       config.headers.Authorization = `Bearer ${authToken}`;
+      updateLastActive();
     }
     
     // Start global loading only if not explicitly skipped

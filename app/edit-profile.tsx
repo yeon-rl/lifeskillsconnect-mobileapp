@@ -7,7 +7,8 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { toast } from 'sonner-native';
 
 const COUNTRIES = [
   "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Argentina", "Armenia", "Australia", "Austria", "Azerbaijan",
@@ -156,10 +157,11 @@ export default function EditProfile() {
         });
       }
 
-      Alert.alert("Success", "Profile updated successfully!");
+      toast.success("Profile updated successfully!");
     } catch (error: any) {
       console.error("Error saving changes:", error);
-      Alert.alert("Error", error.message || "Failed to save profile. Please try again.");
+      const errorMessage = error?.response?.data?.message || error?.response?.data?.error || error?.message || "Failed to save profile. Please try again.";
+      toast.error(errorMessage);
     } finally {
       setIsSaving(false);
     }

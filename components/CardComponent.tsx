@@ -48,13 +48,13 @@ const CardComponent: React.FC<CardComponentProps> = ({
               position: 'absolute', 
               top: 8, 
               right: 8, 
-              backgroundColor: '#527c65', 
+              backgroundColor: colors.primary, 
               paddingHorizontal: 8, 
               paddingVertical: 4, 
               borderRadius: 4 
             }}
           >
-            <ThemedText style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>PREMIUM</ThemedText>
+            <ThemedText style={{ color: colors.white, fontSize: 10, fontWeight: 'bold' }}>PREMIUM</ThemedText>
           </View>
         )}
       </View>

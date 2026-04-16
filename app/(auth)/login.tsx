@@ -4,11 +4,14 @@ import { useThemedColors } from "@/hooks/use-themed-colors";
 import { authService } from "@/services/api/apiServices";
 import { useUserStore } from "@/store/userStore";
 import { Ionicons } from "@expo/vector-icons";
+
+import * as AppleAuthentication from 'expo-apple-authentication';
+
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Image, Pressable, TextInput, View } from "react-native";
-import Svg, { Path } from "react-native-svg";
 import { toast } from 'sonner-native';
+
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
@@ -70,6 +73,62 @@ export default function LoginScreen() {
       setIsLoading(false);
     }
   };
+
+
+  const handleAppleSignIn = async () => {
+    try {
+      setIsLoading(true);
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      if (!credential.identityToken) {
+        throw new Error("Apple Sign-In failed: No identity token received");
+      }
+
+      const response = await authService.appleAuth({ 
+        token: credential.identityToken,
+        user: credential.fullName ? {
+          firstName: credential.fullName.givenName,
+          lastName: credential.fullName.familyName,
+          email: credential.email
+        } : undefined
+      });
+
+      const { user, token, isNewUser } = response.data || response;
+
+      if (token && user) {
+        storeLogin(user, token);
+        if (isNewUser) {
+          toast.success("Welcome! Let's set up your profile.");
+          setTimeout(() => {
+            router.replace("/(auth)/signup?step=account");
+          }, 1500);
+        } else {
+          toast.success("Logged in with Apple!");
+          setTimeout(() => {
+            router.replace("/(tabs)");
+          }, 1500);
+        }
+      } else {
+        throw new Error("Invalid response from server");
+      }
+    } catch (error: any) {
+      if (error.code === 'ERR_REQUEST_CANCELED') {
+        // user cancelled the login flow
+      } else {
+        console.error("Apple Sign-In error:", error);
+        toast.error(error.message || "Apple Sign-In failed");
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+
 
   return (
     <ThemedView className="flex-1 bg-splash px-6 justify-center">
@@ -190,53 +249,20 @@ export default function LoginScreen() {
         <View className="border-b border-slate-300 w-[45%]"></View>
       </View>
 
-      {/* Google Sign Up Button */}
-      <Pressable
-        className="flex-row items-center justify-center rounded-lg py-4 mb-4"
-        style={{ backgroundColor: colors.text }}
-      >
-        <Svg
-          width="24"
-          height="24"
-          viewBox="0 0 24 24"
-          fill="none"
-          //   xmlns="http://www.w3.org/2000/svg"
-        >
-          <Path
-            d="M22.501 12.2331C22.501 11.3698 22.4296 10.7398 22.2748 10.0864H12.2153V13.983H18.12C18.001 14.9514 17.3582 16.4097 15.9296 17.3897L15.9096 17.5202L19.0902 19.9349L19.3106 19.9564C21.3343 18.1247 22.501 15.4297 22.501 12.2331Z"
-            fill="#4285F4"
-          />
-          <Path
-            d="M12.214 22.5001C15.1068 22.5001 17.5353 21.5667 19.3092 19.9567L15.9282 17.39C15.0235 18.0083 13.8092 18.44 12.214 18.44C9.38069 18.44 6.97596 16.6083 6.11874 14.0767L5.99309 14.0871L2.68583 16.5955L2.64258 16.7133C4.40446 20.1433 8.0235 22.5001 12.214 22.5001Z"
-            fill="#34A853"
-          />
-          <Path
-            d="M6.12046 14.0765C5.89428 13.4232 5.76337 12.7231 5.76337 11.9998C5.76337 11.2764 5.89428 10.5765 6.10856 9.92313L6.10257 9.78398L2.75386 7.23535L2.64429 7.28642C1.91814 8.70977 1.50146 10.3081 1.50146 11.9998C1.50146 13.6915 1.91814 15.2897 2.64429 16.7131L6.12046 14.0765Z"
-            fill="#FBBC05"
-          />
-          <Path
-            d="M12.2141 5.55997C14.2259 5.55997 15.583 6.41163 16.3569 7.12335L19.3807 4.23C17.5236 2.53834 15.1069 1.5 12.2141 1.5C8.02353 1.5 4.40447 3.85665 2.64258 7.28662L6.10686 9.92332C6.97598 7.39166 9.38073 5.55997 12.2141 5.55997Z"
-            fill="#EB4335"
-          />
-        </Svg>
 
-        <ThemedText
-          type="small14"
-          className=" font-semibold text-base ml-2"
-          style={{ color: colors.background }}
-        >
-          Sign up with Google
-        </ThemedText>
-      </Pressable>
 
       {/* Apple Sign Up Button */}
-      <Pressable className="flex-row items-center justify-center bg-[#5A7C651A] rounded-lg py-4 mb-6">
+      {/* <Pressable 
+        className="flex-row items-center justify-center bg-[#5A7C651A] rounded-lg py-4 mb-6"
+        onPress={handleAppleSignIn}
+        disabled={isLoading}
+      >
         <Svg
+
           width="32"
           height="32"
           viewBox="0 0 32 32"
           fill="none"
-          //   xmlns="http://www.w3.org/2000/svg"
         >
           <Path
             d="M30 16C30 23.728 23.735 30 16 30C8.265 30 2 23.728 2 16C2 8.265 8.265 2 16 2C23.735 2 30 8.265 30 16Z"
@@ -251,11 +277,10 @@ export default function LoginScreen() {
         <ThemedText
           type="small14"
           className=" font-semibold text-base ml-2"
-          //   style={{ color: colors.background }}
         >
           Sign up with Apple
         </ThemedText>
-      </Pressable>
+      </Pressable> */}
 
       {/* Sign Up Link */}
       <View className="flex-row justify-center">

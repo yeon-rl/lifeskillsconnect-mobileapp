@@ -2,7 +2,7 @@ import { useThemedColors } from '@/hooks/use-themed-colors';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
-import { Dimensions, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Dimensions, Image, Modal, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 
 const { width } = Dimensions.get('window');
@@ -13,6 +13,7 @@ interface CertificateModalProps {
   courseName?: string;
   studentName?: string;
   date?: string;
+  certificateImage?: string;
 }
 
 export const CertificateModal = ({ 
@@ -20,7 +21,8 @@ export const CertificateModal = ({
   onClose,
   courseName = "Financial literacy and Budgeting",
   studentName = "Arlene McCoy",
-  date = "29 May, 2024"
+  date = "29 May, 2024",
+  certificateImage
 }: CertificateModalProps) => {
 
   const themedColors = useThemedColors();
@@ -41,58 +43,68 @@ export const CertificateModal = ({
             end={{ x: 1, y: 1 }}
             style={styles.certificateCard}
           >
-             <View style={styles.certificateInner}>
-                {/* Header Content */}
-                <View style={styles.certHeader}>
-                    <Text style={styles.dateText}>DATE: {date}</Text>
-                    <Text style={styles.certTitle}>CERTIFICATE OF COMPLETION</Text>
-                    <Text style={styles.acknowledgeText}>This acknowledges that</Text>
-                    <Text style={styles.studentName}>{studentName}</Text>
-                </View>
-
-                {/* Body Content */}
-                <View style={styles.certBody}>
-                    <Text style={styles.bodyText}>have successfully completed the</Text>
-                    <Text style={styles.courseName}>{courseName}</Text>
-                    <Text style={styles.bodyText}>offered by <Text style={{fontWeight: 'bold'}}>WatchDog Security</Text></Text>
-                </View>
-
-                <Text style={styles.descriptionText}>
-                    This training provided comprehensive knowledge and practical skills in identifying, preventing, and responding to phishing and smishing attacks, enhancing cybersecurity awareness and resilience.
-                </Text>
-
-                {/* Signatures */}
-                <View style={styles.signaturesRow}>
-                    <View style={styles.signatureBlock}>
-                        {/* Fake Signature */}
-                        <Text style={styles.signatureSign}>Manraaj</Text>
-                        <View style={styles.signatureLine} />
-                        <Text style={styles.signatoryName}>Manraaj Singh Mand</Text>
-                        <Text style={styles.signatoryTitle}>Co-Founder</Text>
+             {certificateImage ? (
+                <Image 
+                    source={{ uri: certificateImage }} 
+                    style={StyleSheet.absoluteFillObject} 
+                    resizeMode="contain"
+                />
+             ) : (
+                <View style={styles.certificateInner}>
+                    {/* Header Content */}
+                    <View style={styles.certHeader}>
+                        <Text style={styles.dateText}>DATE: {date}</Text>
+                        <Text style={styles.certTitle}>CERTIFICATE OF COMPLETION</Text>
+                        <Text style={styles.acknowledgeText}>This acknowledges that</Text>
+                        <Text style={styles.studentName}>{studentName}</Text>
                     </View>
-                    <View style={styles.signatureBlock}>
-                         {/* Fake Signature */}
-                        <Text style={styles.signatureSign}>Ranhjot</Text>
-                        <View style={styles.signatureLine} />
-                        <Text style={styles.signatoryName}>Ranhjot Singh Mand</Text>
-                        <Text style={styles.signatoryTitle}>Co-Founder</Text>
+
+                    {/* Body Content */}
+                    <View style={styles.certBody}>
+                        <Text style={styles.bodyText}>have successfully completed the</Text>
+                        <Text style={styles.courseName}>{courseName}</Text>
+                        <Text style={styles.bodyText}>offered by <Text style={{fontWeight: 'bold'}}>WatchDog Security</Text></Text>
+                    </View>
+
+                    <Text style={styles.descriptionText}>
+                        This training provided comprehensive knowledge and practical skills in identifying, preventing, and responding to phishing and smishing attacks, enhancing cybersecurity awareness and resilience.
+                    </Text>
+
+                    {/* Signatures */}
+                    <View style={styles.signaturesRow}>
+                        <View style={styles.signatureBlock}>
+                            {/* Fake Signature */}
+                            <Text style={styles.signatureSign}>Manraaj</Text>
+                            <View style={styles.signatureLine} />
+                            <Text style={styles.signatoryName}>Manraaj Singh Mand</Text>
+                            <Text style={styles.signatoryTitle}>Co-Founder</Text>
+                        </View>
+                        <View style={styles.signatureBlock}>
+                            {/* Fake Signature */}
+                            <Text style={styles.signatureSign}>Ranhjot</Text>
+                            <View style={styles.signatureLine} />
+                            <Text style={styles.signatoryName}>Ranhjot Singh Mand</Text>
+                            <Text style={styles.signatoryTitle}>Co-Founder</Text>
+                        </View>
+                    </View>
+                    
+                    {/* Decorative Badge */}
+                    <View style={styles.badgeContainer}>
+                        <Ionicons name="ribbon" size={40} color="#6D28D9" />
                     </View>
                 </View>
-                
-                {/* Decorative Badge */}
-                <View style={styles.badgeContainer}>
-                    <Ionicons name="ribbon" size={40} color="#6D28D9" />
-                </View>
-             </View>
+             )}
              
              {/* Right Side Dark Detail (mimicking the image design) */}
-             <View style={styles.rightDecor}>
-                <Ionicons name="shield-checkmark" size={30} color="rgba(255,255,255,0.5)" />
-                <View style={styles.logoBottom}>
-                    <Text style={styles.logoText}>WATCHDOG</Text>
-                    <Text style={styles.logoTextSmall}>SECURITY</Text>
+             {!certificateImage && (
+                <View style={styles.rightDecor}>
+                    <Ionicons name="shield-checkmark" size={30} color="rgba(255,255,255,0.5)" />
+                    <View style={styles.logoBottom}>
+                        <Text style={styles.logoText}>WATCHDOG</Text>
+                        <Text style={styles.logoTextSmall}>SECURITY</Text>
+                    </View>
                 </View>
-             </View>
+             )}
           </LinearGradient>
 
           <Text style={[styles.modalCourseTitle, {color: themedColors.text}]}>{courseName}</Text>
@@ -102,10 +114,34 @@ export const CertificateModal = ({
             <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={onClose}>
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.button, styles.downloadButton]} onPress={() => {
-                console.log("Download Clicked");
-                // Implement download logic later
-            }}>
+            <TouchableOpacity 
+              style={[styles.button, styles.downloadButton]} 
+              onPress={async () => {
+                if (!certificateImage) {
+                    Alert.alert("Error", "No certificate image available to download.");
+                    return;
+                }
+                
+                try {
+                    const result = await Share.share({
+                        url: certificateImage,
+                        message: `Check out my certificate for ${courseName}!`,
+                    });
+                    
+                    if (result.action === Share.sharedAction) {
+                        if (result.activityType) {
+                            // shared with activity type of result.activityType
+                        } else {
+                            // shared
+                        }
+                    } else if (result.action === Share.dismissedAction) {
+                        // dismissed
+                    }
+                } catch (error: any) {
+                    Alert.alert("Error", error.message);
+                }
+              }}
+            >
               <Text style={styles.downloadButtonText}>Download</Text>
             </TouchableOpacity>
           </View>

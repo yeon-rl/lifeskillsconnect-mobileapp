@@ -56,6 +56,8 @@ interface UserState {
   clearError: () => void;
   _hasHydrated: boolean;
   setHasHydrated: (state: boolean) => void;
+  lastActiveAt: number | null;
+  updateLastActive: () => void;
 }
 
 export const useUserStore = create<UserState>()(
@@ -69,12 +71,14 @@ export const useUserStore = create<UserState>()(
       error: null,
 
       // Actions
-      setUser: (user, authenticated = true) =>
+      setUser: (user, authenticated = true) => {
         set({
           currentUser: user,
           isAuthenticated: authenticated,
           error: null,
-        }),
+          lastActiveAt: Date.now(),
+        });
+      },
 
       setAuthToken: (token) =>
         set({
@@ -99,6 +103,7 @@ export const useUserStore = create<UserState>()(
           authToken: token,
           isAuthenticated: true,
           error: null,
+          lastActiveAt: Date.now(),
         }),
 
       logout: async () => {
@@ -108,6 +113,7 @@ export const useUserStore = create<UserState>()(
           authToken: null,
           isAuthenticated: false,
           error: null,
+          lastActiveAt: null,
         });
         
         // We no longer call AsyncStorage.clear() to preserve 
@@ -132,6 +138,9 @@ export const useUserStore = create<UserState>()(
       
       _hasHydrated: false,
       setHasHydrated: (state) => set({ _hasHydrated: state }),
+
+      lastActiveAt: null,
+      updateLastActive: () => set({ lastActiveAt: Date.now() }),
     }),
     {
       name: 'user-storage',

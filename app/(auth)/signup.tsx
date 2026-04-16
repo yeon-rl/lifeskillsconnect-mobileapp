@@ -6,7 +6,7 @@ import { useUserStore } from "@/store/userStore";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as Location from "expo-location";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -332,6 +332,15 @@ const INTERESTS: Interest[] = [
   },
 ];
 
+const maskEmail = (email: string) => {
+  if (!email || !email.includes("@")) return email;
+  const [local, domain] = email.split("@");
+  if (local.length <= 3) {
+    return local.charAt(0) + "****" + "@" + domain;
+  }
+  return local.substring(0, 3) + "********" + "@" + domain;
+};
+
 export default function SignupScreen() {
   const [currentStep, setCurrentStep] = useState<SignupStep>("email");
   const [email, setEmail] = useState("");
@@ -371,6 +380,14 @@ export default function SignupScreen() {
   const { currentUser, setUser, setAuthToken, setAuthenticated, updateUser } = useUserStore();
   const colors = useThemedColors();
   const router = useRouter();
+  const { step } = useLocalSearchParams<{ step?: string }>();
+
+  // If arriving from social sign-in (new user), jump directly to the account step
+  useEffect(() => {
+    if (step === 'account') {
+      setCurrentStep('account');
+    }
+  }, [step]);
 
   // Auto-detect location
   useEffect(() => {
@@ -833,40 +850,10 @@ export default function SignupScreen() {
             ></View>
           </View>
 
-          {/* Google Button */}
-          <Pressable
-            className="flex-row items-center justify-center rounded-lg py-4 mb-4"
-            style={{ backgroundColor: colors.text }}
-          >
-            <Svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <Path
-                d="M22.501 12.2331C22.501 11.3698 22.4296 10.7398 22.2748 10.0864H12.2153V13.983H18.12C18.001 14.9514 17.3582 16.4097 15.9296 17.3897L15.9096 17.5202L19.0902 19.9349L19.3106 19.9564C21.3343 18.1247 22.501 15.4297 22.501 12.2331Z"
-                fill="#4285F4"
-              />
-              <Path
-                d="M12.214 22.5001C15.1068 22.5001 17.5353 21.5667 19.3092 19.9567L15.9282 17.39C15.0235 18.0083 13.8092 18.44 12.214 18.44C9.38069 18.44 6.97596 16.6083 6.11874 14.0767L5.99309 14.0871L2.68583 16.5955L2.64258 16.7133C4.40446 20.1433 8.0235 22.5001 12.214 22.5001Z"
-                fill="#34A853"
-              />
-              <Path
-                d="M6.12046 14.0765C5.89428 13.4232 5.76337 12.7231 5.76337 11.9998C5.76337 11.2764 5.89428 10.5765 6.10856 9.92313L6.10257 9.78398L2.75386 7.23535L2.64429 7.28642C1.91814 8.70977 1.50146 10.3081 1.50146 11.9998C1.50146 13.6915 1.91814 15.2897 2.64429 16.7131L6.12046 14.0765Z"
-                fill="#FBBC05"
-              />
-              <Path
-                d="M12.2141 5.55997C14.2259 5.55997 15.583 6.41163 16.3569 7.12335L19.3807 4.23C17.5236 2.53834 15.1069 1.5 12.2141 1.5C8.02353 1.5 4.40447 3.85665 2.64258 7.28662L6.10686 9.92332C6.97598 7.39166 9.38073 5.55997 12.2141 5.55997Z"
-                fill="#EB4335"
-              />
-            </Svg>
-            <ThemedText
-              type="small"
-              className="font-semibold text-base ml-2"
-              style={{ color: colors.background }}
-            >
-              Sign up with Google
-            </ThemedText>
-          </Pressable>
+
 
           {/* Apple Button */}
-          <Pressable
+          {/* <Pressable
             className="flex-row items-center justify-center rounded-lg py-4"
             style={{ backgroundColor: "#5A7C651A" }}
           >
@@ -883,7 +870,7 @@ export default function SignupScreen() {
             <ThemedText type="small" className="font-semibold text-base ml-2">
               Sign up with Apple
             </ThemedText>
-          </Pressable>
+          </Pressable> */}
 
           <View className="flex-row justify-center mt-5">
             <ThemedText className="text-gray-700" type="small">
@@ -958,8 +945,8 @@ export default function SignupScreen() {
               className="text-sm"
               type="small"
             >
-              We’ve sent you a confirmation code to your email
-              Okok*********n@gmail.com
+              We’ve sent you a confirmation code to your email{" "}
+              {maskEmail(email)}
             </ThemedText>
           </View>
 
