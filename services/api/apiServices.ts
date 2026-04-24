@@ -134,6 +134,42 @@ export const authService = {
       throw error;
     }
   },
+
+  /**
+   * Request Password Reset OTP (Unauthenticated)
+   */
+  forgotPassword: async (data: { email: string }) => {
+    try {
+      const response = await apiClient.post("/auth/forgot-password", data);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Verify Reset OTP (Unauthenticated)
+   */
+  verifyResetOTP: async (data: { email: string; otp: string }) => {
+    try {
+      const response = await apiClient.post("/auth/verify-reset-otp", data);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Reset Password (Unauthenticated)
+   */
+  resetPassword: async (data: { email: string; newPassword: string }) => {
+    try {
+      const response = await apiClient.post("/auth/reset-password", data);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
 };
 /**
  * Service for course related API calls
@@ -633,4 +669,111 @@ export const subscriptionService = {
       throw error;
     }
   },
+};
+
+/**
+ * Service for job related API calls
+ */
+export const jobService = {
+  /**
+   * Get filtered jobs
+   */
+  getJobs: async (params?: { location?: string; roleType?: string; datePosted?: string; search?: string }) => {
+    try {
+      const response = await apiClient.get('/jobs', { params });
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching jobs:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get user-specific jobs (applied, saved)
+   */
+  getUserJobs: async (status: 'applied' | 'saved', token?: string) => {
+    try {
+      const config: any = {
+        params: { status }
+      };
+      if (token) {
+        config.headers = { Authorization: `Bearer ${token}` };
+      }
+      const response = await apiClient.get('/jobs/user-jobs', config);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching user ${status} jobs:`, error);
+      throw error;
+    }
+  },
+
+  /**
+   * Save or update job status for user
+   */
+  updateUserJobStatus: async (data: { job_id: string; status: 'applied' | 'saved' }, token?: string) => {
+    try {
+      const config: any = {};
+      if (token) {
+        config.headers = { Authorization: `Bearer ${token}` };
+      }
+      const response = await apiClient.post('/jobs/user-jobs', data, config);
+      return response.data;
+    } catch (error) {
+      console.error(`Error updating job ${data.job_id} status to ${data.status}:`, error);
+      throw error;
+    }
+  },
+
+  /**
+   * Apply for a job with CV and cover letter
+   */
+  applyToJob: async (data: { job_id: string; cv: string; cover_letter: string }, token?: string) => {
+    try {
+      const config: any = {};
+      if (token) {
+        config.headers = { Authorization: `Bearer ${token}` };
+      }
+      const response = await apiClient.post('/jobs/user-jobs', {
+        ...data,
+        status: 'applied'
+      }, config);
+      return response.data;
+    } catch (error) {
+      console.error(`Error applying for job ${data.job_id}:`, error);
+      throw error;
+    }
+  }
+};
+
+/**
+ * Service for wellbeing related API calls
+ */
+export const wellbeingService = {
+  /**
+   * Get wellbeing questions from the API
+   */
+  getWellbeingQuestions: async () => {
+    try {
+      const response = await apiClient.get('/wellbeing/questions');
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching wellbeing questions:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Submit wellbeing check answers
+   */
+  submitWellbeingAnswers: async (formattedAnswers: any[]) => {
+    try {
+      const response = await apiClient.post('/wellbeing/answers', {
+        data: formattedAnswers
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Error submitting wellbeing answers:", error);
+      throw error;
+    }
+  }
 };

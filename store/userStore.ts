@@ -24,6 +24,7 @@ export interface User {
     dial: string;
     flag: string;
   };
+  city?: string;
 
   totalPoints?: number;
   watchedCourses?: {

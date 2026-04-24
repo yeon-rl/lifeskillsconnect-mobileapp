@@ -12,6 +12,16 @@
       "distribution": "internal"
     },
     "production": {
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://lsc-api.accordiaharmony.org/api",
+        "EXPO_PUBLIC_SOCKET_URL": "https://lsc-api.accordiaharmony.org",
+        "EXPO_PUBLIC_API_SECRET_KEY": "your_secret_key_here",
+        "EXPO_PUBLIC_GOOGLE_CLIENT_ID": "444130446318-kd2qafkbrofqogrfmuiqmondl595svec.apps.googleusercontent.com",
+        "EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET": "lifeskills_uploads",
+        "EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME": "dr3ytxl5m",
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_51SjgKwBsP0sDtM6Ph6A6TirvU2UNFS9FTO9fyFOzzAj2zVGLwtSohaRz8WS9LRn6iHwaRkPQquEuWIKizpP7S5ha00K6h8GsTF",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyDFjgCB1mSIRRN0FZkx-h346DkyntHiTYU"
+      },
       "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"

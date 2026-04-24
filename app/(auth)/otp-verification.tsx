@@ -1,6 +1,6 @@
 import { useTheme } from '@/context/ThemeContext';
 import { useThemedColors } from '@/hooks/use-themed-colors';
-import { userService } from '@/services/api/apiServices';
+import { authService, userService } from '@/services/api/apiServices';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
@@ -13,7 +13,7 @@ export default function OtpVerification() {
   // We can get email and phone from params
   const { email, phone } = useLocalSearchParams(); 
 
-  const [otp, setOtp] = useState(['', '', '', '']);
+  const [otp, setOtp] = useState(['', '', '', '', '']);
   const [loading, setLoading] = useState(false);
   const inputRefs = useRef<Array<TextInput | null>>([]);
 
@@ -21,10 +21,17 @@ export default function OtpVerification() {
     router.back();
   };
 
+  const maskEmail = (emailStr: string) => {
+    if (!emailStr || !emailStr.includes('@')) return emailStr;
+    const [name, domain] = emailStr.split('@');
+    if (name.length <= 2) return `${name}***@${domain}`;
+    return `${name.substring(0, 2)}***${name.substring(name.length - 1)}@${domain}`;
+  };
+
   const handleNext = async () => {
     const otpString = otp.join('');
-    if (otpString.length !== 4) {
-      Alert.alert('Error', 'Please enter the 4-digit OTP');
+    if (otpString.length !== 5) {
+      Alert.alert('Error', 'Please enter the 5-digit OTP');
       return;
     }
 
@@ -34,7 +41,7 @@ export default function OtpVerification() {
       if (email) data.email = email;
       if (phone) data.phone = phone;
 
-      const response = await userService.verifyPasswordOTP(data);
+      const response = await authService.verifyResetOTP(data);
       // The token might be at the top level, inside a data object, or in a user object
       const token = response.token || response.data?.token || response.user?.token;
 
@@ -47,7 +54,7 @@ export default function OtpVerification() {
 
       router.push({
         pathname: '/create-new-password',
-        params: { token: token || '' } // Pass whatever we have
+        params: { token: token || '', email: String(email) }
       });
     } catch (error: any) {
       // Show the actual error message from the response or the error object
@@ -67,7 +74,7 @@ export default function OtpVerification() {
     newOtp[index] = text;
     setOtp(newOtp);
 
-    if (text && index < 3) {
+    if (text && index < 4) {
         inputRefs.current[index + 1]?.focus();
     }
   };
@@ -94,7 +101,8 @@ export default function OtpVerification() {
         <View style={styles.titleContainer}>
             <Text style={[styles.title, { color: colors.text }]}>OTP Verification 🧐</Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-                We’ve sent you a confirmation code to your {email ? `email ${email}` : `phone number ${phone}`}
+                We’ve sent you a confirmation code to your email
+                {"\n"}{maskEmail(String(email || 'your email'))}
             </Text>
         </View>
 
@@ -113,10 +121,10 @@ export default function OtpVerification() {
                         }
                     ]}
                     value={digit}
-                    onChangeText={(text) => handleChange(text, index)}
-                    onKeyPress={(e) => handleKeyPress(e, index)}
                     keyboardType="number-pad"
                     maxLength={1}
+                    onChangeText={(text) => handleChange(text, index)}
+                    onKeyPress={(e) => handleKeyPress(e, index)}
                 />
             ))}
         </View>
@@ -180,7 +188,7 @@ const styles = StyleSheet.create({
       marginTop: 20,
   },
   otpInput: {
-      width: 60,
+      width: 55,
       height: 60,
       borderRadius: 12,
       textAlign: 'center',

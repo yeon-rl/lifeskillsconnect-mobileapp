@@ -67,6 +67,7 @@ export default function EditProfile() {
   const [paramLanguage, setParamLanguage] = useState(currentUser?.preferred_language ?? '');
   const [image, setImage] = useState<string | null>(currentUser?.userImage ?? null);
   const [imageFile, setImageFile] = useState<any>(null);
+  const [city, setCity] = useState(currentUser?.city ?? '');
 
   useEffect(() => {
     const fetchLanguages = async () => {
@@ -139,6 +140,7 @@ export default function EditProfile() {
         phoneNumber: mobile,
         userImage: imageUrl,
         nationality: location,
+        city: city,
         preferred_language: paramLanguage,
       };
 
@@ -152,6 +154,7 @@ export default function EditProfile() {
           fullname: name,
           phone: mobile,
           nationality: location,
+          city: city,
           preferred_language: paramLanguage,
           userImage: imageUrl,
         });
@@ -275,6 +278,18 @@ export default function EditProfile() {
             placeholder="Mobile Number"
             placeholderTextColor={colors.gray300}
             editable={!currentUser?.phone}
+          />
+        </View>
+
+        {/* City */}
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: colors.text }]}>City</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: themeMode === 'dark' ? colors.bglight01 : '#F9FAFB', color: colors.text }]}
+            value={city}
+            onChangeText={setCity}
+            placeholder="City (e.g. Port Harcourt)"
+            placeholderTextColor={colors.gray300}
           />
         </View>
 

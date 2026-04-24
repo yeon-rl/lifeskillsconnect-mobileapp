@@ -223,9 +223,12 @@ export default function LoginScreen() {
             Password must be at least 6 characters
           </ThemedText>
         )}
-        <View className="flex items-end mt-2">
+        <Pressable 
+          onPress={() => router.push("/reset-password")}
+          className="flex items-end mt-2"
+        >
           <ThemedText type="small14">Forgot Password?</ThemedText>
-        </View>
+        </Pressable>
       </View>
 
       {/* Login Button */}

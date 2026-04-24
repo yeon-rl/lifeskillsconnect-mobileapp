@@ -108,6 +108,34 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="jobs"
+          options={{
+            title: "Jobs",
+            tabBarIcon: ({ color, focused }) => (
+              <Svg
+                width="22"
+                height="20"
+                viewBox="0 0 22 20"
+                fill={focused ? color : "none"}
+              >
+                <Path
+                  d="M7 5V3C7 2.44772 7.44772 2 8 2H14C14.5523 2 15 2.44772 15 3V5M3 7C3 5.89543 3.89543 5 5 5H17C18.1046 5 19 5.89543 19 7V15C19 16.1046 18.1046 17 17 17H5C3.89543 17 3 16.1046 3 15V7Z"
+                  stroke={color}
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <Path
+                  d="M10 11H12"
+                  stroke={color}
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </Svg>
+            ),
+          }}
+        />
+        <Tabs.Screen
           name="profile"
           options={{
             title: "Profile",

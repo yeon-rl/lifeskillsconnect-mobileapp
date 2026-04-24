@@ -1,6 +1,6 @@
 import { useTheme } from '@/context/ThemeContext';
 import { useThemedColors } from '@/hooks/use-themed-colors';
-import { userService } from '@/services/api/apiServices';
+import { authService, userService } from '@/services/api/apiServices';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
@@ -11,7 +11,7 @@ export default function CreateNewPassword() {
   const colors = useThemedColors();
   const router = useRouter();
   const { themeMode } = useTheme();
-  const { token } = useLocalSearchParams();
+  const { token, email } = useLocalSearchParams();
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -44,9 +44,13 @@ export default function CreateNewPassword() {
     setError({});
     setLoading(true);
     try {
-      // Proceed with change password, using an empty string if token is missing
-      // Some backends might manage authorization via session/cookies after OTP verification
-      await userService.changePassword({ newPassword: password }, token ? String(token) : "");
+      if (!email) {
+        throw new Error('Email is missing. Please try again from the beginning.');
+      }
+      await authService.resetPassword({ 
+          email: String(email), 
+          newPassword: password 
+      });
       setModalVisible(true);
     } catch (err: any) {
       const message = err?.response?.data?.message || 'Failed to change password. Please try again.';
@@ -58,7 +62,7 @@ export default function CreateNewPassword() {
 
   const handleDone = () => {
       setModalVisible(false);
-      router.navigate('/(tabs)/profile'); 
+      router.replace('/(auth)/login'); 
   };
 
   return (
@@ -75,7 +79,7 @@ export default function CreateNewPassword() {
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.titleContainer}>
-            <Text style={[styles.title, { color: colors.text }]}>Create New Password 🤙🏼</Text>
+            <Text style={[styles.title, { color: colors.text }]}>Create New Password 👍🏻</Text>
             <Text style={[styles.subtitle, { color: colors.gray300 }]}>Enter new password</Text>
         </View>
 

@@ -2,7 +2,7 @@
   "expo": {
     "name": "lifeskillsconnect-mobileapp",
     "slug": "lifeskillsconnect-mobileapp",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/appLogo.png",
     "scheme": "lifeskillsconnectmobileapp",
@@ -14,6 +14,7 @@
       "backgroundColor": "#5A7C65"
     },
     "ios": {
+      "buildNumber": "4",
       "bundleIdentifier": "com.accordiaharmony.lifeskills",
       "supportsTablet": true,
       "splash": {

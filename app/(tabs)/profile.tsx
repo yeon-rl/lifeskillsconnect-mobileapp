@@ -306,7 +306,7 @@ export default function Profile() {
             }
             color="#2563EB" 
             label="Job Feeds" 
-            onPress={() => router.push('/job-feeds')}
+            onPress={() => router.push('/(tabs)/jobs')}
             textColor={colors.text}
           />
 
@@ -469,7 +469,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    marginBottom: 20,
+    marginBottom: 15,
   },
   avatarContainer: {
     position: 'relative',
@@ -525,7 +525,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     overflow: 'hidden',
-    marginBottom: 25,
+    marginBottom: 20,
     position: 'relative',
   },
   premiumContent: {
@@ -563,12 +563,12 @@ const styles = StyleSheet.create({
   },
   menuContainer: {
     paddingHorizontal: 20,
-    gap: 15, // Gap between items
+    gap: 10, // Gap between items
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12, // Increased for better touch target
+    paddingVertical: 10, // Increased for better touch target
   },
   menuIconContainer: {
     width: 40,
