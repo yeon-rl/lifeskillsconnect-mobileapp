@@ -4,7 +4,9 @@ import axios from 'axios';
 import { toast } from 'sonner-native';
 
 // Get API URL from environment variables
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001/api';
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://lsc-api.accordiaharmony.org/api';
+
+console.log('🚀 API Client Initialized with BASE_URL:', BASE_URL);
 
 const apiClient = axios.create({
   baseURL: BASE_URL,

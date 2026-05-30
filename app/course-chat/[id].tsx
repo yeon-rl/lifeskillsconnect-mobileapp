@@ -20,7 +20,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { toast } from "sonner-native";
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3001/api";
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "https://lsc-api.accordiaharmony.org/api";
 
 interface Message {
   id: string | number;

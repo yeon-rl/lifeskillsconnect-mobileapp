@@ -325,8 +325,8 @@ export default function ModuleDetailScreen() {
     if (!uri) return null;
     if (uri.startsWith('http')) return { uri };
     
-    // Derive base URL from API URL (e.g., http://localhost:3001/api -> http://localhost:3001/)
-    const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001/api';
+    // Derive base URL from API URL (e.g., https://lsc-api.accordiaharmony.org/api -> https://lsc-api.accordiaharmony.org/)
+    const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'https://lsc-api.accordiaharmony.org/api';
     const baseUrl = apiUrl.replace(/\/api$/, '/');
     
     // Ensure we don't have double slashes
@@ -339,7 +339,7 @@ export default function ModuleDetailScreen() {
     if (uri.startsWith('http')) return { uri };
     
     // Derive base URL from API URL
-    const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001/api';
+    const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'https://lsc-api.accordiaharmony.org/api';
     const baseUrl = apiUrl.replace(/\/api$/, '/');
     
     const cleanUri = uri.startsWith('/') ? uri.substring(1) : uri;
@@ -828,7 +828,7 @@ export default function ModuleDetailScreen() {
                 <>
                   <Pressable 
                     onPress={() => setAssessmentResult(null)}
-                    style={[styles.primaryButton, { backgroundColor: colors.primary, width: '100%' }]}
+                    style={[styles.primaryButton, { backgroundColor: colors.primary, width: '100%' }] as any}
                   >
                     <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16, textAlign: 'center' }}>Continue</Text>
                   </Pressable>
@@ -847,7 +847,7 @@ export default function ModuleDetailScreen() {
                   {remainingAttempts > 0 ? (
                     <Pressable 
                       onPress={handleRetakeAssessment}
-                      style={[styles.primaryButton, { backgroundColor: '#527c65', width: '100%' }]}
+                      style={[styles.primaryButton, { backgroundColor: '#527c65', width: '100%' }] as any}
                     >
                       <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16, textAlign: 'center' }}>Retake Assessment</Text>
                     </Pressable>
@@ -1016,7 +1016,7 @@ export default function ModuleDetailScreen() {
                     <View style={{flexDirection: 'row', gap: 16, width: '100%'}}>
                         <Pressable 
                             onPress={handleStartResourceQuiz}
-                            style={[styles.primaryButton, {flex: 1, backgroundColor: colors.primary}]}
+                            style={[styles.primaryButton, {flex: 1, backgroundColor: colors.primary}] as any}
                         >
                             <Text style={{color: 'white', fontWeight: 'bold', fontSize: 16, textAlign: 'center'}}>Start Quiz</Text>
                         </Pressable>
@@ -1687,7 +1687,7 @@ export default function ModuleDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles: any = StyleSheet.create({
   videoHeader: {
       position: 'absolute',
       top: 0,
