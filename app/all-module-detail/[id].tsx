@@ -111,12 +111,16 @@ export default function AllModuleDetail() {
         ? { uri: fetchedCourse.instructor.image } 
         : (fetchedCourse.thumbnail ? { uri: fetchedCourse.thumbnail } : require('@/assets/images/woman.png')),
     },
-    lessons: (fetchedCourse.resources || []).map((res: any, index: number) => ({
-      id: res.id?.toString() || index.toString(),
-      title: res.title || "Untitled Lesson",
-      duration: res.duration ? `${Math.floor(res.duration / 60)}:00 mins` : "0:00 mins", 
-      section: index === 0 ? 'Section 1 | Course Components' : undefined
-    })),
+    lessons: (fetchedCourse.resources || []).map((lesson: any, index: number) => {
+      // Calculate total duration from nested resources
+      const totalSeconds = (lesson.resources || []).reduce((acc: number, r: any) => acc + (Number(r.duration) || 0), 0);
+      return {
+        id: lesson.id?.toString() || index.toString(),
+        title: lesson.title || "Untitled Lesson",
+        duration: totalSeconds > 0 ? `${Math.floor(totalSeconds / 60)}:00 mins` : "0:00 mins", 
+        section: index === 0 ? 'Section 1 | Course Components' : undefined
+      };
+    }),
     reviews: (fetchedCourse.reviews || []).map((rev: any) => ({
       id: rev.id?.toString() || Math.random().toString(),
       name: rev.name || "Anonymous",
@@ -133,7 +137,7 @@ export default function AllModuleDetail() {
       
       <View style={styles.metaRow}>
         <Ionicons name="play-circle-outline" size={20} color={colors.text} />
-        <ThemedText style={styles.metaText}>{fetchedCourse.duration}hrs of Screen time</ThemedText>
+        <ThemedText style={styles.metaText}>{fetchedCourse.duration ?? 0}hrs of Screen time</ThemedText>
       </View>
         {
           fetchedCourse.has_certificate ?
@@ -145,11 +149,11 @@ export default function AllModuleDetail() {
         }
       <View style={styles.metaRow}>
         <Ionicons name="book-outline" size={20} color={colors.text} />
-        <ThemedText style={styles.metaText}>{fetchedCourse.resources.length} Downloadable Resourse</ThemedText>
+        <ThemedText style={styles.metaText}>{(fetchedCourse.resources ?? []).length} Downloadable Resource</ThemedText>
       </View>
       <View style={styles.metaRow}>
         <Ionicons name="star-outline" size={20} color={colors.text} />
-        <ThemedText style={styles.metaText}>{fetchedCourse.points} Points</ThemedText>
+        <ThemedText style={styles.metaText}>{fetchedCourse.points ?? 0} Points</ThemedText>
       </View>
 
       <ThemedText style={styles.descriptionText} numberOfLines={isExpanded ? undefined : 2}>

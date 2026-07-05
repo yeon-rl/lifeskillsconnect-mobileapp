@@ -12,6 +12,7 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   TextInput,
   TouchableOpacity,
@@ -25,10 +26,15 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "https://lsc-api.accordi
 interface Message {
   id: string | number;
   sender_name: string;
-  role: "student" | "instructor";
+  role: "student" | "instructor" | "admin" | string;
   sender_photo?: string;
   message: string;
   created_at: string | Date;
+  message_type?: string;
+  reply_to_id?: number | string | null;
+  is_pinned?: number;
+  reply_message?: string | null;
+  reply_sender_name?: string | null;
 }
 
 export default function CourseChatScreen() {
@@ -40,6 +46,7 @@ export default function CourseChatScreen() {
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
@@ -48,6 +55,12 @@ export default function CourseChatScreen() {
   const isLoadingRef = useRef(false);
   const hasMoreRef = useRef(true);
   const courseId = typeof id === 'string' ? id : '';
+
+  // Determine if current user can pin messages (instructor or admin)
+  const canPin = !!currentUser && (
+    (course as any)?.instructor_id === currentUser.userId ||
+    ["admin", "subadmin"].includes(((currentUser as any)?.role || "").toString().toLowerCase())
+  );
 
   // Fetch chat history
   const fetchHistory = useCallback(async (pageNum: number, prepend = false) => {
@@ -84,22 +97,27 @@ export default function CourseChatScreen() {
     }
   }, [courseId, authToken]);
 
-  // Socket and Initial History
+  // Socket, Reconnection Handler, and Initial History
   useEffect(() => {
     if (!courseId) return;
 
     // 1. Fetch initial history
     fetchHistory(1);
 
-    // 2. Connect and Join room (async)
+    // 2. Define reconnection handler — re-joins the room when socket reconnects
+    const onConnect = () => {
+      console.log(`Re-joining course chat room on reconnect: ${courseId}`);
+      socketClient.emit("join_course_chat", { courseId });
+    };
+
+    // 3. Connect and Join room (async)
     const initializeSocket = async () => {
       await socketClient.connect({ token: authToken });
       await socketClient.emit("join_course_chat", { courseId });
 
-      // 3. Listen for new messages
+      // 4. Listen for new messages
       const handleReceiveMessage = (newMessage: Message) => {
         setMessages((prev) => {
-          // Check if this message already exists as an optimistic/temp message
           const isOptimisticDuplicate = prev.some(
             (msg) =>
               msg.id.toString().startsWith("temp-") &&
@@ -108,7 +126,6 @@ export default function CourseChatScreen() {
           );
 
           if (isOptimisticDuplicate) {
-            // Replace the FIRST matching optimistic message with the real one from server
             let replaced = false;
             return prev.map((msg) => {
               if (!replaced && msg.id.toString().startsWith("temp-") && 
@@ -121,7 +138,6 @@ export default function CourseChatScreen() {
             });
           }
 
-          // Final safety check: ignore if the real ID already exists
           if (prev.some((msg) => msg.id === newMessage.id)) {
             return prev;
           }
@@ -129,10 +145,18 @@ export default function CourseChatScreen() {
           return [...prev, newMessage];
         });
         
-        // Auto-scroll to bottom for new messages
         setTimeout(() => {
           scrollViewRef.current?.scrollToEnd({ animated: false });
         }, 100);
+      };
+
+      // 5. Listen for pin updates
+      const handlePinnedUpdated = (data: { messageId: number | string; isPinned: number }) => {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === data.messageId ? { ...msg, is_pinned: data.isPinned } : msg
+          )
+        );
       };
 
       const handleErrorMessage = (data: { message: string }) => {
@@ -140,18 +164,24 @@ export default function CourseChatScreen() {
       };
 
       await socketClient.on("receive_course_message", handleReceiveMessage);
+      await socketClient.on("message_pinned_updated", handlePinnedUpdated);
       await socketClient.on("error_message", handleErrorMessage);
+
+      // 6. Bind reconnect handler so the room is re-joined if socket drops and reconnects
+      await socketClient.on("connect", onConnect);
     };
 
     initializeSocket();
 
-    // 4. Cleanup on unmount
+    // 7. Cleanup on unmount
     return () => {
       socketClient.emit("leave_course_chat", { courseId });
       socketClient.off("receive_course_message");
+      socketClient.off("message_pinned_updated");
       socketClient.off("error_message");
+      socketClient.off("connect");
     };
-  }, [courseId, fetchHistory]);
+  }, [courseId, fetchHistory, authToken]);
 
   const scrollToBottom = useCallback((animated: boolean = true) => {
     setTimeout(() => {
@@ -168,10 +198,31 @@ export default function CourseChatScreen() {
     }
   };
 
+  const handleTogglePin = (messageId: string | number, currentlyPinned?: number) => {
+    const nextPinned = currentlyPinned === 1 ? 0 : 1;
+    setMessages((prev) =>
+      prev.map((msg) => (msg.id === messageId ? { ...msg, is_pinned: nextPinned } : msg))
+    );
+    socketClient.emit("pin_course_message", {
+      courseId,
+      messageId,
+      isPinned: nextPinned === 1,
+    });
+  };
+
+  const handleReplyToMessage = (message: Message) => {
+    setReplyTo(message);
+  };
+
+  const clearReply = () => setReplyTo(null);
+
+  const handleVoiceInput = () => {
+    toast("Use the microphone on your keyboard to dictate a message 🎙️");
+  };
+
   const sendMessage = () => {
     if (!inputText.trim() || !currentUser) return;
 
-    // Optimistic update - add message immediately to UI
     const optimisticMessage: Message = {
       id: `temp-${Date.now()}`,
       sender_name: currentUser.fullname || currentUser.username || "You",
@@ -179,23 +230,26 @@ export default function CourseChatScreen() {
       sender_photo: currentUser.userImage || undefined,
       message: inputText.trim(),
       created_at: new Date().toISOString(),
+      message_type: "text",
+      reply_to_id: replyTo?.id ?? null,
+      reply_message: replyTo?.message ?? null,
+      reply_sender_name: replyTo?.sender_name ?? null,
+      is_pinned: 0,
     };
 
-    // Add message to UI immediately
     setMessages((prev) => [...prev, optimisticMessage]);
     
-    // Clear input immediately for better UX
     const messageToSend = inputText.trim();
     setInputText("");
+    setReplyTo(null);
     
-    // Scroll to bottom to show new message
     scrollToBottom(true);
 
-    // Send to server
     socketClient.emit("send_course_message", {
       courseId,
       message: messageToSend,
-      messageType: 'text'
+      messageType: 'text',
+      replyToId: replyTo?.id ?? null,
     });
   };
 
@@ -238,7 +292,7 @@ export default function CourseChatScreen() {
         <ScrollView
           ref={scrollViewRef}
           style={{ flex: 1 }}
-          contentContainerStyle={{ padding: 16, gap: 16 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 8 }}
           onScroll={handleScroll}
           scrollEventThrottle={400}
         >
@@ -263,14 +317,17 @@ export default function CourseChatScreen() {
             </View>
           ) : (
             <>
-              <View style={{ alignItems: 'center', marginBottom: 8 }}>
+              <View style={{ alignItems: 'center', marginBottom: 12 }}>
                 <View style={{ backgroundColor: colors.bglight10, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 }}>
                     <ThemedText style={{ fontSize: 12, color: colors.textSecondary }}>Today</ThemedText>
                 </View>
               </View>
 
               {messages.map((msg, index) => {
-                const isMe = msg.sender_name === (currentUser?.fullname || currentUser?.username);
+                const currentUserName = (currentUser?.fullname || currentUser?.username || "").trim().toLowerCase();
+                const msgSenderName = (msg.sender_name || "").trim().toLowerCase();
+                const isMe = msgSenderName === currentUserName || msg.sender_name === "You";
+
                 return (
                   <View
                     key={msg.id || `msg-${index}-${msg.created_at}`}
@@ -279,16 +336,16 @@ export default function CourseChatScreen() {
                       justifyContent: isMe ? "flex-end" : "flex-start",
                       alignItems: 'flex-end',
                       gap: 8,
-                      marginBottom: 12
+                      marginBottom: 16
                     }}
                   >
                     {!isMe && (
-                      <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#ddd', overflow: 'hidden' }}>
+                      <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.primary + '20', overflow: 'hidden', borderWidth: 1, borderColor: colors.primary + '30' }}>
                           {msg.sender_photo ? (
                               <Image source={{ uri: msg.sender_photo }} style={{ width: '100%', height: '100%' }} />
                           ) : (
-                              <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary + '20' }}>
-                                 <ThemedText style={{ fontSize: 12, fontWeight: 'bold', color: colors.primary }}>{msg.sender_name[0]}</ThemedText>
+                              <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                                 <ThemedText style={{ fontSize: 12, fontWeight: 'bold', color: colors.primary }}>{msg.sender_name[0]?.toUpperCase()}</ThemedText>
                               </View>
                           )}
                       </View>
@@ -296,12 +353,12 @@ export default function CourseChatScreen() {
 
                     <View style={{ maxWidth: '75%' }}>
                       {!isMe && (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 4, marginBottom: 2 }}>
-                          <ThemedText style={{ fontSize: 11, color: colors.textSecondary }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 4, marginBottom: 2, gap: 6 }}>
+                          <ThemedText style={{ fontSize: 11, color: colors.textSecondary, fontWeight: 'bold' }}>
                               {msg.sender_name}
                           </ThemedText>
                           {msg.role === "instructor" && (
-                            <View style={{ backgroundColor: colors.primary + '30', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 6 }}>
+                            <View style={{ backgroundColor: colors.primary + '30', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
                               <ThemedText style={{ fontSize: 9, color: colors.primary, fontWeight: 'bold' }}>
                                 INSTRUCTOR
                               </ThemedText>
@@ -309,6 +366,28 @@ export default function CourseChatScreen() {
                           )}
                         </View>
                       )}
+
+                      {/* Reply preview bubble */}
+                      {msg.reply_to_id && msg.reply_message && (
+                        <View style={{
+                          backgroundColor: colors.bglight10,
+                          borderLeftWidth: 3,
+                          borderLeftColor: colors.primary,
+                          borderRadius: 8,
+                          paddingHorizontal: 10,
+                          paddingVertical: 6,
+                          marginBottom: 4,
+                          opacity: 0.85,
+                        }}>
+                          <ThemedText style={{ fontSize: 10, color: colors.primary, fontWeight: 'bold', marginBottom: 1 }}>
+                            Replying to {msg.reply_sender_name || "Someone"}
+                          </ThemedText>
+                          <ThemedText style={{ fontSize: 12, color: colors.textSecondary }} numberOfLines={1}>
+                            {msg.reply_message}
+                          </ThemedText>
+                        </View>
+                      )}
+
                       <View
                         style={{
                           padding: 12,
@@ -318,18 +397,55 @@ export default function CourseChatScreen() {
                           borderBottomRightRadius: isMe ? 4 : 16,
                           borderWidth: msg.role === 'instructor' && !isMe ? 1 : 0,
                           borderColor: msg.role === 'instructor' ? colors.primary + '30' : 'transparent',
+                          position: 'relative',
                         }}
                       >
-                        <ThemedText style={{ color: isMe ? "white" : colors.text }}>
+                        {/* Pinned badge */}
+                        {msg.is_pinned === 1 && (
+                          <View style={{
+                            position: 'absolute',
+                            top: 4,
+                            right: 8,
+                            backgroundColor: '#FBBF24' + '30',
+                            paddingHorizontal: 6,
+                            paddingVertical: 2,
+                            borderRadius: 4,
+                          }}>
+                            <ThemedText style={{ fontSize: 9, color: '#92400E', fontWeight: 'bold' }}>📌 PINNED</ThemedText>
+                          </View>
+                        )}
+                        <ThemedText style={{ color: isMe ? "white" : colors.text, paddingTop: msg.is_pinned === 1 ? 16 : 0 }}>
                           {msg.message}
                         </ThemedText>
                       </View>
-                      <ThemedText style={{ fontSize: 10, color: colors.textSecondary, textAlign: isMe ? "right" : "left", marginTop: 2, marginHorizontal: 4 }}>
-                        {new Date(msg.created_at).toLocaleTimeString("en-US", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </ThemedText>
+
+                      {/* Time + Reply + Pin actions */}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, marginHorizontal: 4, gap: 8, justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
+                        <ThemedText style={{ fontSize: 10, color: colors.textSecondary }}>
+                          {new Date(msg.created_at).toLocaleTimeString("en-US", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </ThemedText>
+                        <View style={{ flexDirection: 'row', gap: 4 }}>
+                          <Pressable
+                            onPress={() => handleReplyToMessage(msg)}
+                            style={{ backgroundColor: colors.bglight10, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 }}
+                          >
+                            <ThemedText style={{ fontSize: 10, color: colors.text }}>Reply</ThemedText>
+                          </Pressable>
+                          {canPin && (
+                            <Pressable
+                              onPress={() => handleTogglePin(msg.id, msg.is_pinned)}
+                              style={{ backgroundColor: colors.bglight10, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 }}
+                            >
+                              <ThemedText style={{ fontSize: 10, color: colors.text }}>
+                                {msg.is_pinned === 1 ? "Unpin" : "Pin"}
+                              </ThemedText>
+                            </Pressable>
+                          )}
+                        </View>
+                      </View>
                     </View>
                   </View>
                 );
@@ -338,12 +454,40 @@ export default function CourseChatScreen() {
           )}
         </ScrollView>
 
+        {/* Reply Preview Bar */}
+        {replyTo && (
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 16,
+            paddingVertical: 8,
+            borderTopWidth: 1,
+            borderTopColor: colors.primary + '30',
+            backgroundColor: colors.primary + '08',
+          }}>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={{ fontSize: 11, color: colors.primary, fontWeight: 'bold' }}>
+                Replying to {replyTo.sender_name}
+              </ThemedText>
+              <ThemedText style={{ fontSize: 13, color: colors.textSecondary }} numberOfLines={1}>
+                {replyTo.message}
+              </ThemedText>
+            </View>
+            <Pressable
+              onPress={clearReply}
+              style={{ padding: 8 }}
+            >
+              <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
+            </Pressable>
+          </View>
+        )}
+
         {/* Input */}
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12, borderTopWidth: 1, borderTopColor: colors.bglight10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16, gap: 8, borderTopWidth: 1, borderTopColor: colors.bglight10 }}>
             <View
               style={{
                 flex: 1,
@@ -363,8 +507,8 @@ export default function CourseChatScreen() {
                 onChangeText={setInputText}
                 multiline
               />
-              <TouchableOpacity>
-                <Ionicons name="happy-outline" size={24} color={colors.textSecondary} />
+              <TouchableOpacity onPress={handleVoiceInput} style={{ marginLeft: 4 }}>
+                <Ionicons name="mic-outline" size={22} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
 

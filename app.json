@@ -2,7 +2,7 @@
   "expo": {
     "name": "lifeskillsconnect-mobileapp",
     "slug": "lifeskillsconnect-mobileapp",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/images/appLogo.png",
     "scheme": "lifeskillsconnectmobileapp",
@@ -14,7 +14,7 @@
       "backgroundColor": "#5A7C65"
     },
     "ios": {
-      "buildNumber": "5",
+      "buildNumber": "7",
       "bundleIdentifier": "com.accordiaharmony.lifeskills",
       "supportsTablet": true,
       "splash": {
@@ -54,6 +54,12 @@
       "expo-web-browser",
 
       "expo-apple-authentication",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.444130446318-7trdrve05qtddireli26kr48glmk9vou"
+        }
+      ],
       [
         "expo-build-properties",
         {

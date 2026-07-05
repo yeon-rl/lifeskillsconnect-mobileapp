@@ -19,6 +19,24 @@ import Svg, { Path } from 'react-native-svg';
 
 const { width } = Dimensions.get('window');
 
+const AchievementItem = ({ 
+  label, 
+  onPress,
+  themedColors
+}: { 
+  label: string; 
+  onPress: () => void;
+  themedColors: any;
+}) => (
+  <TouchableOpacity 
+    style={[styles.itemContainer, { backgroundColor: themedColors.backgroundBg }]}
+    onPress={onPress}
+  >
+    <Text style={[styles.itemLabel, { color: themedColors.text }]}>{label}</Text>
+    <Ionicons name="chevron-forward" size={20} color={themedColors.gray300} />
+  </TouchableOpacity>
+);
+
 export default function Achievements() {
   const themedColors = useThemedColors();
   const router = useRouter();
@@ -51,21 +69,6 @@ export default function Achievements() {
 
   console.log(JSON.stringify(userPointsData, null, 2), "check current user")
 
-  const AchievementItem = ({ 
-    label, 
-    onPress 
-  }: { 
-    label: string, 
-    onPress: () => void 
-  }) => (
-    <TouchableOpacity 
-      style={[styles.itemContainer, { backgroundColor: themedColors.backgroundBg }]}
-      onPress={onPress}
-    >
-      <Text style={[styles.itemLabel, { color: themedColors.text }]}>{label}</Text>
-      <Ionicons name="chevron-forward" size={20} color={themedColors.gray300} />
-    </TouchableOpacity>
-  );
 
   return (
     <View style={[styles.container, { backgroundColor: themedColors.background }]}>
@@ -92,18 +95,22 @@ export default function Achievements() {
           <AchievementItem 
             label="Rank level" 
             onPress={() => setRankModalVisible(true)} 
+            themedColors={themedColors}
           />
           <AchievementItem 
             label="Total Points" 
             onPress={() => setPointsModalVisible(true)} 
+            themedColors={themedColors}
           />
            <AchievementItem 
             label="Certificate" 
             onPress={() => router.push('/certificates')} 
+            themedColors={themedColors}
           />
            <AchievementItem 
             label="Completed Courses" 
             onPress={() => router.push('/completed-courses')} 
+            themedColors={themedColors}
           />
         </View>
       </ScrollView>

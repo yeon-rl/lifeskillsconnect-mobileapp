@@ -14,10 +14,40 @@ export default function NotificationsScreen() {
   const colors = useThemedColors();
   const router = useRouter();
   const [activeTab, setActiveTab] = React.useState<
-    "all" | "message" | "activity" | "safeguarding"
+    "all" | "activity" | "safeguarding"
   >("all");
 
   const { notifications, fetchNotifications, markAsRead, markAllAsRead } = useNotificationStore();
+
+  const allUnreadCount = React.useMemo(() => notifications.filter(n => !n.is_read || n.is_read === 0).length, [notifications]);
+  const activityUnreadCount = React.useMemo(() => notifications.filter(n => 
+    (!n.is_read || n.is_read === 0) && (n.category === "ACTIVITY" || n.category === "GENERAL")
+  ).length, [notifications]);
+  const safeguardingUnreadCount = React.useMemo(() => notifications.filter(n => 
+    (!n.is_read || n.is_read === 0) && (n.category === "SAFEGUARDING" || n.category === "SAFE_SPACE")
+  ).length, [notifications]);
+
+  const handleAction = (action: string, data?: any) => {
+    switch (action) {
+      case "view_course":
+        const cid = data?.course_id || data?.courseId || data?.id || data?.course?.id;
+        if (cid) {
+          router.push(`/module-detail/${cid}`);
+        } else {
+          router.push("/(tabs)/explore");
+        }
+        break;
+      case "view_rewards":
+        router.push("/reward-points");
+        break;
+      case "speak_up":
+      case "map":
+        router.push("/safe-space");
+        break;
+      default:
+        break;
+    }
+  };
 
   React.useEffect(() => {
     // Initial fetch
@@ -139,7 +169,7 @@ export default function NotificationsScreen() {
 
   const mapCategoryToTabType = (category: NotificationCategory) => {
     switch (category) {
-      case "GENERAL": return "message";
+      case "GENERAL": return "activity";
       case "ACTIVITY": return "activity";
       case "SAFEGUARDING":
       case "SAFE_SPACE": return "safeguarding";
@@ -214,13 +244,71 @@ export default function NotificationsScreen() {
             {item.message}
           </ThemedText>
 
+          {/* Action buttons or Fallbacks based on category/metadata */}
+          {item.metadata?.actions && item.metadata.actions.length > 0 ? (
+            <View className="flex-row gap-2 mt-2 flex-wrap">
+              {item.metadata.actions.map((action: any, idx: number) => (
+                <Pressable
+                  key={idx}
+                  onPress={() => handleAction(action.action, item.metadata)}
+                  style={{
+                    backgroundColor: colors.primary,
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: 6,
+                  }}
+                >
+                  <ThemedText style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>
+                    {action.label}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </View>
+          ) : (
+            <View className="flex-row gap-2 mt-2 flex-wrap">
+              {(item.category === "ACTIVITY" && (item.icon === "book-open" || item.title?.toLowerCase().includes("course"))) && (
+                <Pressable
+                  onPress={() => handleAction("view_course", item.metadata)}
+                  style={{
+                    backgroundColor: colors.primary,
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: 6,
+                  }}
+                >
+                  <ThemedText style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>
+                    View Course
+                  </ThemedText>
+                </Pressable>
+              )}
+              {(item.category === "ACTIVITY" && (item.icon === "award" || item.title?.toLowerCase().includes("point"))) && (
+                <Pressable
+                  onPress={() => handleAction("view_rewards")}
+                  style={{
+                    backgroundColor: colors.primary,
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: 6,
+                  }}
+                >
+                  <ThemedText style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>
+                    Check Point Progress
+                  </ThemedText>
+                </Pressable>
+              )}
+            </View>
+          )}
+
           {/* Action buttons for safeguarding notifications */}
           {(item.category === "SAFEGUARDING" || item.category === "SAFE_SPACE") && (
-              <View className="flex-row gap-2">
-                  <Pressable className="flex-1 rounded-lg">
+              <View className="flex-row gap-2 mt-2">
+                  <Pressable 
+                    className="flex-1 rounded-lg"
+                    onPress={() => handleAction("speak_up")}
+                  >
                     <ThemedText
                       className="text-xs font-medium text-left"
-                      style={{ color: colors.text, fontStyle: "italic" }}
+                      style={{ color: colors.primary, fontStyle: "italic" }}
                       type="small"
                     >
                       - Tap here to speak up.
@@ -230,7 +318,7 @@ export default function NotificationsScreen() {
             )}
 
           <ThemedText
-            className="text-xs mt-1"
+            className="text-xs mt-2"
             style={{ color: colors.green }}
             type="small"
           >
@@ -251,10 +339,9 @@ export default function NotificationsScreen() {
     </View>
   );
   const tabs = [
-    { label: "All", value: "all" as const },
-    { label: "Messages", value: "message" as const },
-    { label: "Activities", value: "activity" as const },
-    { label: "Safeguarding", value: "safeguarding" as const },
+    { label: "All", value: "all" as const, unreadCount: allUnreadCount },
+    { label: "Activities", value: "activity" as const, unreadCount: activityUnreadCount },
+    { label: "Safe Space", value: "safeguarding" as const, unreadCount: safeguardingUnreadCount },
   ];
 
   return (
@@ -308,7 +395,7 @@ export default function NotificationsScreen() {
               <Pressable
                 key={tab.value}
                 onPress={() => setActiveTab(tab.value)}
-                className="px-4 py-3 mr-2"
+                className="px-4 py-3 mr-2 flex-row items-center gap-1.5"
                 style={{
                   borderBottomWidth: activeTab === tab.value ? 2 : 0,
                   borderBottomColor:
@@ -326,6 +413,22 @@ export default function NotificationsScreen() {
                 >
                   {tab.label}
                 </ThemedText>
+                {tab.unreadCount > 0 && (
+                  <View 
+                    style={{
+                      backgroundColor: colors.primary,
+                      borderRadius: 10,
+                      paddingHorizontal: 6,
+                      paddingVertical: 1.5,
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <ThemedText style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>
+                      {tab.unreadCount}
+                    </ThemedText>
+                  </View>
+                )}
               </Pressable>
             ))}
           </View>

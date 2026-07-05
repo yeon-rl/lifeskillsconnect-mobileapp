@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  Animated,
   Image,
   ImageBackground,
   Pressable,
@@ -18,6 +19,155 @@ import { useUserStore } from "@/store/userStore";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
+
+const BANNERS = [
+  {
+    key: "premium",
+    source: require("../../assets/images/premiumBg.png"),
+    showContent: true,
+    nonPremiumOnly: true,
+  },
+  {
+    key: "job",
+    source: require("../../assets/images/jobanner.png"),
+    showContent: false,
+    nonPremiumOnly: false,
+  },
+  {
+    key: "wellbeing",
+    source: require("../../assets/images/wellbeingbanner.png"),
+    showContent: false,
+    nonPremiumOnly: false,
+  },
+];
+
+function BannerCarousel({
+  colors,
+  router,
+  isPremium,
+}: {
+  colors: any;
+  router: any;
+  isPremium: boolean;
+}) {
+  const visibleBanners = isPremium
+    ? BANNERS.filter((b) => !b.nonPremiumOnly)
+    : BANNERS;
+  const [activeIndex, setActiveIndex] = useState(0);
+  const fadeAnims = useRef(
+    BANNERS.map((_, i) => new Animated.Value(i === 0 ? 1 : 0)),
+  ).current;
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const goToSlide = (nextIndex: number) => {
+    const currentIndex = activeIndex;
+    Animated.parallel([
+      Animated.timing(fadeAnims[currentIndex], {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnims[nextIndex], {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    setActiveIndex(nextIndex);
+  };
+
+  useEffect(() => {
+    intervalRef.current = setInterval(() => {
+      setActiveIndex((prev) => {
+        const next = (prev + 1) % visibleBanners.length;
+        Animated.parallel([
+          Animated.timing(fadeAnims[prev], {
+            toValue: 0,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(fadeAnims[next], {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+        ]).start();
+        return next;
+      });
+    }, 3500);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []);
+
+  return (
+    <View style={{ height: 150, borderRadius: 16, overflow: "hidden" }}>
+      {visibleBanners.map((banner, index) => (
+        <Animated.View
+          key={banner.key}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            opacity: fadeAnims[index],
+          }}
+        >
+          <ImageBackground
+            source={banner.source}
+            style={{
+              flex: 1,
+              justifyContent: "center",
+              alignItems: "flex-start",
+              paddingLeft: 20,
+            }}
+            resizeMode="cover"
+          >
+            {banner.showContent && (
+              <>
+                <ThemedText
+                  type="subtitle"
+                  className="text-white font-bold text-center"
+                  style={{
+                    textShadowColor: "#E4EEFF",
+                    textShadowOffset: { width: 0, height: 0 },
+                    textShadowRadius: 8,
+                    color: colors.white,
+                  }}
+                >
+                  Level Up with Premium
+                </ThemedText>
+                <ThemedText
+                  className="mt-2"
+                  style={{ color: colors.white }}
+                  type="small"
+                >
+                  Unlock pro skills, mentor support,
+                </ThemedText>
+                <ThemedText style={{ color: colors.white }} type="small">
+                  and tools to grow faster.
+                </ThemedText>
+                <Pressable
+                  onPress={() => router.push("/profile?openPremium=true")}
+                  className="bg-[#4285F4] rounded-lg py-3 w-fit px-5 items-center mt-4"
+                >
+                  <ThemedText
+                    className="text-white font-semibold text-base"
+                    style={{ color: "#FFFFFF" }}
+                    type="small"
+                  >
+                    Upgrade to Premium
+                  </ThemedText>
+                </Pressable>
+              </>
+            )}
+          </ImageBackground>
+        </Animated.View>
+      ))}
+    </View>
+  );
+}
 
 export default function HomeScreen() {
   const colors = useThemedColors();
@@ -95,55 +245,12 @@ export default function HomeScreen() {
         contentInsetAdjustmentBehavior="never"
       >
         <View className="mb-6">
-          {!currentUser?.is_premium ? (
-            <ImageBackground
-              source={require("../../assets/images/premiumBg.png")}
-              style={{
-                height: 150,
-                justifyContent: "center",
-                alignItems: "flex-start",
-                paddingLeft: 20,
-              }}
-              resizeMode="cover"
-            >
-              <ThemedText
-                type="subtitle"
-                className="text-white font-bold text-center"
-                style={{
-                  textShadowColor: "#E4EEFF",
-                  textShadowOffset: { width: 0, height: 0 },
-                  textShadowRadius: 8,
-                  color: colors.white,
-                }}
-              >
-                Level Up with Premium
-              </ThemedText>
-              <ThemedText
-                className="mt-2"
-                style={{ color: colors.white }}
-                type="small"
-              >
-                Unlock pro skills, mentor support,
-              </ThemedText>
-              <ThemedText style={{ color: colors.white }} type="small">
-                and tools to grow faster.
-              </ThemedText>
-
-              {/* Button */}
-              <Pressable
-                onPress={() => router.push("/profile?openPremium=true")}
-                className="bg-[#4285F4] rounded-lg py-3 w-fit px-5 items-center mt-4"
-              >
-                <ThemedText
-                  className="text-white font-semibold text-base"
-                  style={{ color: "#FFFFFF" }}
-                  type="small"
-                >
-                  Upgrade to Premium
-                </ThemedText>
-              </Pressable>
-            </ImageBackground>
-          ) : null}
+          {/* Banner Carousel */}
+          <BannerCarousel
+            colors={colors}
+            router={router}
+            isPremium={!!currentUser?.is_premium}
+          />
 
           <View className="flex-row items-center gap-2 justify-between mt-3">
             <Pressable

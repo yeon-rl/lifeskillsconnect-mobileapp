@@ -2,9 +2,10 @@ import { useThemedColors } from "@/hooks/use-themed-colors";
 import { useNotificationStore } from "@/store/notificationStore";
 import { useUserStore } from "@/store/userStore";
 import { useRouter } from "expo-router";
-import React from "react";
-import { Image, Platform, Pressable, View } from "react-native";
+import React, { useState, useRef } from "react";
+import { Image, Platform, Pressable, View, Modal, Animated, Dimensions, TouchableWithoutFeedback, StyleSheet, ScrollView } from "react-native";
 import Svg, { Path } from "react-native-svg";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import { ThemedText } from "./themed-text";
 import { ThemedView } from "./themed-view";
 
@@ -15,6 +16,35 @@ const UserHeader = () => {
   const { unreadCount } = useNotificationStore();
 
   const { currentUser } = useUserStore();
+
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const { width } = Dimensions.get("window");
+  const drawerWidth = width * 0.75;
+  const slideAnim = useRef(new Animated.Value(-drawerWidth)).current;
+
+  const openDrawer = () => {
+    setIsDrawerOpen(true);
+    Animated.timing(slideAnim, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const closeDrawer = () => {
+    Animated.timing(slideAnim, {
+      toValue: -drawerWidth,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => setIsDrawerOpen(false));
+  };
+  
+  const handleDrawerNavigation = (path: string) => {
+    closeDrawer();
+    setTimeout(() => {
+      router.push(path as any);
+    }, 300);
+  };
 
   const handleNotificationPress = () => {
     router.push("/notifications");
@@ -59,32 +89,7 @@ const UserHeader = () => {
             </View>
           </View>
         </View>
-        <View className="flex-row gap-2">
-          <Pressable onPress={() => router.push('/support')}>
-            <Svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              // xmlns="http://www.w3.org/2000/svg"
-            >
-              <Path
-                d="M21 11.1833V8.28029C21 6.64029 21 5.82028 20.5959 5.28529C20.1918 4.75029 19.2781 4.49056 17.4507 3.9711C16.2022 3.6162 15.1016 3.18863 14.2223 2.79829C13.0234 2.2661 12.424 2 12 2C11.576 2 10.9766 2.2661 9.77771 2.79829C8.89839 3.18863 7.79784 3.61619 6.54933 3.9711C4.72193 4.49056 3.80822 4.75029 3.40411 5.28529C3 5.82028 3 6.64029 3 8.28029V11.1833C3 16.8085 8.06277 20.1835 10.594 21.5194C11.2011 21.8398 11.5046 22 12 22C12.4954 22 12.7989 21.8398 13.406 21.5194C15.9372 20.1835 21 16.8085 21 11.1833Z"
-                fill="#5A7C65"
-                stroke="#5A7C65"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-              <Path
-                d="M14.5 11.5C14.5 12.8807 13.3807 14 12 14C10.6193 14 9.5 12.8807 9.5 11.5C9.5 10.1193 10.6193 9 12 9C13.3807 9 14.5 10.1193 14.5 11.5Z"
-                fill="white"
-                stroke="#5A7C65"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </Svg>
-          </Pressable>
+        <View className="flex-row gap-3 items-center">
           <Pressable
             onPress={handleNotificationPress}
             style={{ position: "relative" }}
@@ -134,8 +139,105 @@ const UserHeader = () => {
               </View>
             )}
           </Pressable>
+
+          <Pressable onPress={openDrawer} className="justify-center">
+            <Svg
+              width="28"
+              height="28"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#5A7C65"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <Path d="M4 12h16M4 6h16M4 18h16" />
+            </Svg>
+          </Pressable>
         </View>
       </View>
+
+      <Modal visible={isDrawerOpen} transparent animationType="none">
+        <View style={{ flex: 1, flexDirection: "row" }}>
+          <TouchableWithoutFeedback onPress={closeDrawer}>
+            <View
+              style={{
+                ...StyleSheet.absoluteFillObject,
+                backgroundColor: "rgba(0,0,0,0.4)",
+              }}
+            />
+          </TouchableWithoutFeedback>
+          <Animated.View
+            style={{
+              width: drawerWidth,
+              backgroundColor: colors.background,
+              height: "100%",
+              transform: [{ translateX: slideAnim }],
+              paddingTop: Platform.OS === "android" ? 40 : 60,
+              paddingHorizontal: 24,
+              borderTopRightRadius: 20,
+              borderBottomRightRadius: 20,
+              shadowColor: "#000",
+              shadowOffset: { width: 5, height: 0 },
+              shadowOpacity: 0.1,
+              shadowRadius: 10,
+              elevation: 5,
+            }}
+          >
+            {/* Top Logo and Back Button */}
+            <View className="mb-6 flex-row items-center gap-3">
+              <Pressable onPress={closeDrawer} className="bg-[#5A7C65] w-8 h-8 rounded justify-center items-center">
+                <Feather name="arrow-left" size={18} color="white" />
+              </Pressable>
+              <ThemedText className="text-lg">
+                <ThemedText style={{ color: colors.textSecondary }}>LifeSkills </ThemedText>
+                <ThemedText className="font-bold" style={{ color: colors.text }}>Connect</ThemedText>
+              </ThemedText>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+              <ThemedText type="small" className="mb-2 mt-2" style={{ color: colors.textSecondary, fontSize: 13 }}>Main</ThemedText>
+              <Pressable onPress={() => handleDrawerNavigation("/all-modules")} className="py-3 px-3 mb-1 flex-row items-center">
+                <Feather name="layers" size={20} color={colors.textSecondary} />
+                <ThemedText className="ml-3 font-medium text-base" style={{ color: colors.textSecondary }}>My Modules</ThemedText>
+              </Pressable>
+
+              <ThemedText type="small" className="mb-2 mt-4" style={{ color: colors.textSecondary, fontSize: 13 }}>Safe Guarding Tools</ThemedText>
+              <Pressable onPress={() => handleDrawerNavigation("/crisis-help")} className="py-3 px-3 mb-1 flex-row items-center">
+                <Feather name="life-buoy" size={20} color={colors.textSecondary} />
+                <ThemedText className="ml-3 font-medium text-base" style={{ color: colors.textSecondary }}>Crisis Help</ThemedText>
+              </Pressable>
+              <Pressable onPress={() => handleDrawerNavigation("/anonymous-chat")} className="py-3 px-3 mb-1 flex-row items-center">
+                <Ionicons name="chatbubbles-outline" size={20} color={colors.textSecondary} />
+                <ThemedText className="ml-3 font-medium text-base" style={{ color: colors.textSecondary }}>Anonymous Chat</ThemedText>
+              </Pressable>
+              <Pressable onPress={() => handleDrawerNavigation("/report-abuse")} className="py-3 px-3 mb-1 flex-row items-center">
+                <Feather name="alert-circle" size={20} color={colors.textSecondary} />
+                <ThemedText className="ml-3 font-medium text-base" style={{ color: colors.textSecondary }}>Report Abuse</ThemedText>
+              </Pressable>
+              <Pressable onPress={() => handleDrawerNavigation("/safe-space")} className="py-3 px-3 mb-1 flex-row items-center">
+                <Feather name="map-pin" size={20} color={colors.textSecondary} />
+                <ThemedText className="ml-3 font-medium text-base" style={{ color: colors.textSecondary }}>Safe Space Map</ThemedText>
+              </Pressable>
+
+              <ThemedText type="small" className="mb-2 mt-4" style={{ color: colors.textSecondary, fontSize: 13 }}>Others</ThemedText>
+              <Pressable onPress={() => handleDrawerNavigation("/jobs")} className="py-3 px-3 mb-1 flex-row items-center">
+                <Feather name="briefcase" size={20} color={colors.textSecondary} />
+                <ThemedText className="ml-3 font-medium text-base" style={{ color: colors.textSecondary }}>Job Feed</ThemedText>
+              </Pressable>
+              <Pressable onPress={() => handleDrawerNavigation("/reward-points")} className="py-3 px-3 mb-1 flex-row items-center">
+                <Feather name="award" size={20} color={colors.textSecondary} />
+                <ThemedText className="ml-3 font-medium text-base" style={{ color: colors.textSecondary }}>Reward</ThemedText>
+              </Pressable>
+              <Pressable onPress={() => handleDrawerNavigation("/wellbeing-check")} className="py-3 px-3 mb-1 flex-row items-center">
+                <Feather name="smile" size={20} color={colors.textSecondary} />
+                <ThemedText className="ml-3 font-medium text-base" style={{ color: colors.textSecondary }}>Well - being</ThemedText>
+              </Pressable>
+
+            </ScrollView>
+          </Animated.View>
+        </View>
+      </Modal>
     </ThemedView>
   );
 };

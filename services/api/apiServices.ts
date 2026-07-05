@@ -84,6 +84,18 @@ export const authService = {
 
 
   /**
+   * Google authentication
+   */
+  googleAuth: async (data: { token: string; user?: any }) => {
+    try {
+      const response = await apiClient.post("/auth/google", data);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
    * Apple authentication
    */
   appleAuth: async (data: { token: string; user?: any }) => {
@@ -249,6 +261,32 @@ export const courseService = {
   },
 
   /**
+   * Retake a course to grant additional attempts
+   * @param courseId 
+   * @param token 
+   */
+  retakeCourse: async (courseId: string, token?: string) => {
+    try {
+      const config: any = {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      };
+
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+
+      const response = await apiClient.post(`/courses/retake/${courseId}`, {}, config);
+      return response.data;
+    } catch (error) {
+      console.error(`Error retaking course ${courseId}:`, error);
+      throw error;
+    }
+  },
+
+
+  /**
    * Update progress for a specific resource
    * @param data 
    */
@@ -318,18 +356,54 @@ export const courseService = {
   },
 
   /**
+   * Submit answers for a lesson quiz
+   * @param lessonId 
+   * @param answers 
+   */
+  submitLessonQuiz: async (
+    lessonId: number,
+    answers: { [questionId: number]: number }
+  ) => {
+    try {
+      const response = await apiClient.post(
+        `/resource-quizzes/lesson/${lessonId}/submit`,
+        { answers }
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error submitting lesson quiz:", error);
+      throw error;
+    }
+  },
+
+  /**
    * Skip a resource quiz
    * @param resourceId 
    */
   skipResourceQuiz: async (resourceId: number) => {
     try {
       const response = await apiClient.post(
-        `/resource-quizzes/${resourceId}/skip`,
-        {}
+        `/resource-quizzes/${resourceId}/skip`
       );
       return response.data;
     } catch (error) {
       console.error("Error skipping resource quiz:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Skip a lesson quiz
+   * @param lessonId 
+   */
+  skipLessonQuiz: async (lessonId: number) => {
+    try {
+      const response = await apiClient.post(
+        `/resource-quizzes/lesson/${lessonId}/skip`
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error skipping lesson quiz:", error);
       throw error;
     }
   },

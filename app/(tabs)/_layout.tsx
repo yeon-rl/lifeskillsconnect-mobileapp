@@ -6,7 +6,8 @@ import Svg, { Circle, Defs, LinearGradient, Path, Stop } from "react-native-svg"
 import { HapticTab } from "@/components/haptic-tab";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useThemedColors } from "@/hooks/use-themed-colors";
-import { Platform, TouchableOpacity, View } from "react-native";
+import { BlurView } from "expo-blur";
+import { Platform, StyleSheet, TouchableOpacity, View } from "react-native";
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
@@ -28,22 +29,31 @@ export default function TabLayout() {
           tabBarPosition: "bottom", // Ensure bottom tabs on Android
           tabBarHideOnKeyboard: true, // Optional but usually better on Android
           tabBarStyle: {
-            backgroundColor: colors.tabBackground,
-            // height: 60 + insets.bottom, // Base height (60) + safe area bottom
-            height:
-            Platform.OS === "android"
-              ? TAB_BAR_HEIGHT + insets.bottom
-              : TAB_BAR_HEIGHT,
-
-            paddingBottom:
-              Platform.OS === "android" && insets.bottom > 0
-                ? insets.bottom
-                : 8,
-            // paddingBottom: insets.bottom > 0 ? insets.bottom : 8, // Use inset if present, otherwise default
-            paddingTop: 8,
+            position: "absolute",
+            bottom: Platform.OS === "android" ? insets.bottom + 20 : 25,
+            left: 40,
+            right: 40,
+            marginLeft: 45,
+            marginRight: 45,
+            borderRadius: 30,
+            paddingTop: 10,
+            height: TAB_BAR_HEIGHT,
+            paddingBottom: 0,
+            // paddingTop: 0,
             borderTopWidth: 0, // Cleaner look
-            elevation: 8, // Add shadow on Android
+            backgroundColor: "#5A7C6517",
+            elevation: 10,
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.15,
+            shadowRadius: 15,
           },
+          tabBarBackground: () => (
+            <View style={[StyleSheet.absoluteFill, { borderRadius: 30, overflow: 'hidden' }]}>
+              <BlurView intensity={60} style={StyleSheet.absoluteFill} tint={colorScheme === "dark" ? "dark" : "light"} />
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: "#5A7C6517" }]} />
+            </View>
+          ),
         }}
       >
         <Tabs.Screen
@@ -57,26 +67,6 @@ export default function TabLayout() {
                   fill={focused ? color : "none"}
                   stroke={color}
                   strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </Svg>
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="explore"
-          options={{
-            title: "Explore",
-            tabBarIcon: ({ color, focused }) => (
-              <Svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <Path
-                  fillRule="evenodd"
-                  clipRule="evenodd"
-                  d="M10.5 3.74989C9.61358 3.74989 8.73583 3.92448 7.91689 4.2637C7.09794 4.60292 6.35382 5.10012 5.72703 5.72692C5.10023 6.35371 4.60303 7.09783 4.26381 7.91678C3.92459 8.73572 3.75 9.61347 3.75 10.4999C3.75 11.3863 3.92459 12.2641 4.26381 13.083C4.60303 13.9019 5.10023 14.6461 5.72703 15.2729C6.35382 15.8997 7.09794 16.3969 7.91689 16.7361C8.73583 17.0753 9.61358 17.2499 10.5 17.2499C12.2902 17.2499 14.0071 16.5387 15.273 15.2729C16.5388 14.007 17.25 12.2901 17.25 10.4999C17.25 8.70968 16.5388 6.99279 15.273 5.72692C14.0071 4.46105 12.2902 3.74989 10.5 3.74989ZM2.25 10.4999C2.25017 9.17499 2.56944 7.86961 3.18079 6.69419C3.79214 5.51876 4.67759 4.50787 5.76224 3.74701C6.84689 2.98615 8.09883 2.49771 9.41216 2.32301C10.7255 2.14831 12.0616 2.29249 13.3074 2.74334C14.5533 3.1942 15.6722 3.93847 16.5695 4.91321C17.4669 5.88794 18.1163 7.06446 18.4628 8.34325C18.8094 9.62204 18.8428 10.9655 18.5603 12.2599C18.2778 13.5544 17.6878 14.7617 16.84 15.7799L21.53 20.4699C21.6037 20.5386 21.6628 20.6214 21.7038 20.7134C21.7448 20.8053 21.7668 20.9047 21.7686 21.0054C21.7704 21.1061 21.7518 21.2061 21.7141 21.2995C21.6764 21.3929 21.6203 21.4777 21.549 21.5489C21.4778 21.6201 21.393 21.6763 21.2996 21.714C21.2062 21.7517 21.1062 21.7703 21.0055 21.7685C20.9048 21.7667 20.8055 21.7447 20.7135 21.7037C20.6215 21.6627 20.5387 21.6036 20.47 21.5299L15.78 16.8399C14.5752 17.8434 13.1094 18.4828 11.5543 18.6831C9.99922 18.8835 8.41922 18.6366 6.99941 17.9713C5.5796 17.306 4.37878 16.2499 3.53763 14.9266C2.69648 13.6034 2.24983 12.0678 2.25 10.4999Z"
-                  fill={focused ? color : "none"}
-                  stroke={color}
-                  strokeWidth="1"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
@@ -108,34 +98,6 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="jobs"
-          options={{
-            title: "Jobs",
-            tabBarIcon: ({ color, focused }) => (
-              <Svg
-                width="22"
-                height="20"
-                viewBox="0 0 22 20"
-                fill={focused ? color : "none"}
-              >
-                <Path
-                  d="M7 5V3C7 2.44772 7.44772 2 8 2H14C14.5523 2 15 2.44772 15 3V5M3 7C3 5.89543 3.89543 5 5 5H17C18.1046 5 19 5.89543 19 7V15C19 16.1046 18.1046 17 17 17H5C3.89543 17 3 16.1046 3 15V7Z"
-                  stroke={color}
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <Path
-                  d="M10 11H12"
-                  stroke={color}
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </Svg>
-            ),
-          }}
-        />
-        <Tabs.Screen
           name="profile"
           options={{
             title: "Profile",
@@ -158,13 +120,25 @@ export default function TabLayout() {
             ),
           }}
         />
+        <Tabs.Screen
+          name="explore"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="jobs"
+          options={{
+            href: null,
+          }}
+        />
       </Tabs>
       
       {/* Floating Chatbot Button */}
       <TouchableOpacity
         style={{
           position: "absolute",
-          bottom: Platform.OS === "android" ? TAB_BAR_HEIGHT + insets.bottom + 20 : TAB_BAR_HEIGHT + 20,
+          bottom: Platform.OS === "android" ? insets.bottom + TAB_BAR_HEIGHT + 35 : TAB_BAR_HEIGHT + 45,
           right: 20,
           width: 58,
           height: 58,

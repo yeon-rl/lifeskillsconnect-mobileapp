@@ -96,6 +96,24 @@ export interface CourseData {
   message: string;
 }
 
+// A Lesson is a module (accordion group). It contains video Resources.
+export interface Lesson {
+  id: number;
+  course_id: number;
+  title: string;
+  description?: string;
+  lesson_order: number;
+  is_required: boolean;
+  created_at: string;
+  updated_at: string;
+  progress?: {
+    status: string;
+    completed_at: string | null;
+  };
+  resources: Resource[];
+  quiz: any | null;
+}
+
 export interface CourseProp {
   id: number;
   averageRating: number;
@@ -114,7 +132,11 @@ export interface CourseProp {
   instructor_id: number;
   is_paid: number;
   points: number;
-  resources: Resource[];
+  // Legacy flat resources (may not be present in new API responses)
+  resources?: Resource[];
+  // New API structure: lessons (modules) each containing resources (videos)
+  lessons?: Lesson[];
+  uncategorizedResources?: Resource[];
   subscriptionCount: number;
   students: number;
   thumbnail: string;
@@ -379,52 +401,60 @@ export const useCoursesStore = create<CoursesStore>()(
           );
 
           if (courseIndex !== -1) {
-            const course = { ...userCoursesList[courseIndex] };
-            const resourceIndex = course.course.resources.findIndex(
-              (r: Resource) => r.id === resourceId
-            );
+            const userCourseEntry = { ...userCoursesList[courseIndex] };
+            const course = { ...userCourseEntry.course };
 
-            if (resourceIndex !== -1) {
-              const resources = [...course.course.resources];
-              const resource = { ...resources[resourceIndex] };
+            // Search through lessons[].resources[] (new API structure)
+            let updatedViaLessons = false;
+            if (Array.isArray(course.lessons)) {
+              const updatedLessons = course.lessons.map((lesson: Lesson) => {
+                const resourceIndex = lesson.resources.findIndex(
+                  (r: Resource) => r.id === resourceId
+                );
+                if (resourceIndex === -1) return lesson;
 
-              if (!resource.progress) {
+                const resources = [...lesson.resources];
+                const resource = { ...resources[resourceIndex] };
                 resource.progress = {
-                  completed_at: "",
-                  is_completed: 0,
-                  progress_id: "",
-                  student_id: userId,
-                  last_watched_at: null,
-                  has_started: true as any,
-                  resource_id: resourceId as any,
-                  totalDuration: progress.totalDuration as any,
-                  watch_percentage: 0,
+                  ...(resource.progress || {}),
+                  is_completed: progress.isCompleted as any,
                   watched_duration: progress.watchedDuration as any,
+                  totalDuration: progress.totalDuration as any,
+                  watch_percentage: ((progress.watchedDuration / progress.totalDuration) * 100) as any,
+                  has_started: true as any,
+                  student_id: userId,
+                  resource_id: resourceId as any,
                 };
-              }
-
-              resource.progress = {
-                ...resource.progress,
-                is_completed: progress.isCompleted,
-                watched_duration: progress.watchedDuration as any,
-                totalDuration: progress.totalDuration as any,
-                watch_percentage: ((progress.watchedDuration /
-                  progress.totalDuration) *
-                  100) as any,
-                has_started: true as any,
-              };
-
-              resources[resourceIndex] = resource;
-              course.course.resources = resources;
-
-              const completedCount = resources.filter(
-                (r: Resource) => r.progress?.is_completed === 1
-              ).length;
-              const totalCount = resources.length;
-              course.progress = Math.round((completedCount / totalCount) * 100);
-
-              userCoursesList[courseIndex] = course;
+                resources[resourceIndex] = resource;
+                updatedViaLessons = true;
+                return { ...lesson, resources };
+              });
+              course.lessons = updatedLessons;
             }
+
+            // Fallback: flat resources array (legacy)
+            if (!updatedViaLessons && Array.isArray(course.resources)) {
+              const resourceIndex = course.resources.findIndex(
+                (r: Resource) => r.id === resourceId
+              );
+              if (resourceIndex !== -1) {
+                const resources = [...course.resources];
+                const resource = { ...resources[resourceIndex] };
+                resource.progress = {
+                  ...(resource.progress || {}),
+                  is_completed: progress.isCompleted as any,
+                  watched_duration: progress.watchedDuration as any,
+                  totalDuration: progress.totalDuration as any,
+                  watch_percentage: ((progress.watchedDuration / progress.totalDuration) * 100) as any,
+                  has_started: true as any,
+                };
+                resources[resourceIndex] = resource;
+                course.resources = resources;
+              }
+            }
+
+            userCourseEntry.course = course;
+            userCoursesList[courseIndex] = userCourseEntry;
           }
           return {
             userCourses: {

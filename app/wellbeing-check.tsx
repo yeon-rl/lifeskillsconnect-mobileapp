@@ -242,13 +242,13 @@ export default function WellbeingCheck() {
                     key={rating}
                     style={[
                       styles.ratingButton, 
-                      { backgroundColor: answers[index] === rating ? colors.primary : '#F3F4F6' }
+                      { backgroundColor: answers[index] === rating ? colors.primary : colors.bglight10 }
                     ]}
                     onPress={() => handleAnswer(index, rating)}
                   >
                     <Text style={[
                       styles.ratingButtonText, 
-                      { color: answers[index] === rating ? 'white' : '#111827' }
+                      { color: answers[index] === rating ? 'white' : colors.text }
                     ]}>
                       {rating}
                     </Text>
@@ -261,7 +261,7 @@ export default function WellbeingCheck() {
       )}
 
       {!loading && (
-        <View style={styles.submitButtonContainer}>
+        <View style={[styles.submitButtonContainer, { backgroundColor: colors.background }]}>
           <TouchableOpacity 
             style={[
               styles.primaryButton, 
@@ -338,7 +338,7 @@ export default function WellbeingCheck() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
         <TouchableOpacity 
-          style={styles.backButton}
+          style={[styles.backButton, { backgroundColor: colors.bglight10 }]}
           onPress={handleBack}
         >
           <Ionicons name="chevron-back" size={24} color={colors.text} />

@@ -117,7 +117,18 @@ export const useResourceTracking = (courseId: number, initialResourceId: number 
       // Initialize new tracking data
       if (currentResourceId) {
         const userCourse = getUserCourseById(courseId.toString());
-        const resource = userCourse?.course.resources.find(r => r.id === currentResourceId);
+        const courseData = (userCourse?.course || userCourse) as any;
+
+        // API structure: course.lessons[].resources[] — search all lessons for this resource
+        let resource: any = null;
+        if (Array.isArray(courseData?.lessons)) {
+          for (const lesson of courseData.lessons) {
+            if (Array.isArray(lesson.resources)) {
+              const found = lesson.resources.find((r: any) => r.id === currentResourceId);
+              if (found) { resource = found; break; }
+            }
+          }
+        }
         
         // console.log(`DEBUG: Initializing tracking for resource ${currentResourceId}. Cached progress:`, resource?.progress);
 
@@ -126,13 +137,14 @@ export const useResourceTracking = (courseId: number, initialResourceId: number 
           courseId,
           totalDuration: resource?.duration || 0,
           watchedDuration: Number(resource?.progress?.watched_duration) || 0,
-          isCompleted: resource?.progress?.is_completed === 1,
+          isCompleted: resource?.progress?.is_completed === true || resource?.progress?.is_completed === 1,
         };
       } else {
         trackingDataRef.current = null;
       }
     }
   }, [currentResourceId, courseId, saveProgress, getUserCourseById]);
+
 
   // Pulse Timer
   useEffect(() => {

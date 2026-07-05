@@ -53,6 +53,10 @@ interface LocalLessonResource extends LocalUIResource {
     is_completed: number;
     watched_duration: number;
   };
+  parent_lesson_id?: number;
+  parent_lesson_title?: string;
+  has_module_quiz?: boolean;
+  module_quiz_data?: any;
 }
 
 interface LocalReview {
@@ -151,7 +155,7 @@ export default function ModuleDetailScreen() {
   const [showEnrolledModal, setShowEnrolledModal] = useState(justEnrolled === 'true');
   
   // Dynamic course fetching
-  const { course: fetchedCourse, isLoading, error } = useFetchCourseById(typeof id === 'string' ? id : null);
+  const { course: fetchedCourse, isLoading, error, refetch } = useFetchCourseById(typeof id === 'string' ? id : null, authToken || undefined);
   const { getUserCourseById } = useCoursesStore();
 
   const { currentUser, authToken } = useUserStore();
@@ -160,6 +164,7 @@ export default function ModuleDetailScreen() {
   // State for Lessons/Resources
   const [lessons, setLessons] = useState<LocalLessonResource[]>([]);
   const [currentLessonId, setCurrentLessonId] = useState<string | null>(null);
+  const [expandedModules, setExpandedModules] = useState<{ [moduleId: string]: boolean }>({});
 
   // --- Resource Quiz State ---
   const [showResourceQuizInstructions, setShowResourceQuizInstructions] = useState(false);
@@ -202,6 +207,36 @@ export default function ModuleDetailScreen() {
     return !!(assessmentResult?.course_completed || userCourse?.assessment_status?.is_passed || anyAssessmentPassed);
   }, [assessmentResult, id, getUserCourseById, fetchedCourse]);
 
+  const hasAttemptsLeft = useMemo(() => {
+    // 1. Most accurate: result from a just-submitted assessment
+    if (assessmentResult) {
+      return (assessmentResult.remaining_attempts || 0) > 0;
+    }
+
+    // 2. Try reading from the course detail fetch (getCourseById) — most reliable on page load
+    const courseDetail = fetchedCourse?.course || fetchedCourse;
+    const courseAssessments = Array.isArray(courseDetail?.assessments)
+      ? courseDetail.assessments
+      : courseDetail?.assessments ? [courseDetail.assessments] : [];
+    if (courseAssessments.length > 0) {
+      const assessment = courseAssessments[0];
+      // Backend typically returns attempts_used and max_attempts on the assessment object
+      if (assessment?.max_attempts != null && assessment?.attempts_used != null) {
+        return assessment.attempts_used < assessment.max_attempts;
+      }
+      // Alternatively, remaining_attempts might be directly on the assessment
+      if (assessment?.remaining_attempts != null) {
+        return (assessment.remaining_attempts || 0) > 0;
+      }
+    }
+
+    // 3. Fallback: store data from /my-courses (least reliable — often missing counts)
+    const userCourse = getUserCourseById(id?.toString() || "");
+    const status = userCourse?.assessment_status;
+    if (!status) return true;
+    return status.max_attempts > 0 ? status.attempts_used < status.max_attempts : true;
+  }, [assessmentResult, id, getUserCourseById, fetchedCourse]);
+
 
   // --- Resource Tracking ---
   const { handleVideoProgress, setCurrentResourceId, markAsComplete, setIsPlaying } = useResourceTracking(
@@ -228,8 +263,13 @@ export default function ModuleDetailScreen() {
       // Reset timer when lesson changes
       setResourceViewTime(0);
       setCanMarkComplete(false);
+      
+      const lesson = lessons.find(l => l.id === currentLessonId);
+      if (lesson && lesson.parent_lesson_id) {
+          setExpandedModules(prev => ({ ...prev, [lesson.parent_lesson_id!.toString()]: true }));
+      }
     }
-  }, [currentLessonId]);
+  }, [currentLessonId, lessons]);
 
   // --- Timer Effect ---
   useEffect(() => {
@@ -261,49 +301,85 @@ export default function ModuleDetailScreen() {
       console.log('DEBUG: fetchedCourse updated:', JSON.stringify(fetchedCourse, null, 2));
     }
     
-    // API now returns course data nested under 'course' key
+    // Flatten course.lessons (modules) -> lesson.resources (videos) into a flat array.
+    // API shape:
+    //   course.lessons[]         = modules (accordion headers)
+    //   course.lessons[].resources[] = individual video resources to play
+    const getAllResources = (sourceDetail: any) => {
+      if (!sourceDetail) return [];
+      const allResources: any[] = [];
+      
+      if (Array.isArray(sourceDetail.lessons)) {
+        sourceDetail.lessons.forEach((lesson: any) => {
+          if (Array.isArray(lesson.resources)) {
+            lesson.resources.forEach((res: any) => {
+              allResources.push({
+                ...res,
+                parent_lesson_id: lesson.id,
+                parent_lesson_title: lesson.title,
+                has_module_quiz: !!lesson.quiz,
+                module_quiz_data: lesson.quiz || null,
+              });
+            });
+          }
+        });
+      }
+
+      // Also handle any uncategorised top-level resources
+      if (Array.isArray(sourceDetail.uncategorizedResources)) {
+        allResources.push(...sourceDetail.uncategorizedResources);
+      }
+      return allResources;
+    };
+
     const courseDetail = fetchedCourse?.course || fetchedCourse;
-    const courseResources = courseDetail?.resources || [];
+    const courseResources = getAllResources(courseDetail);
 
     if (courseResources.length > 0) {
-      // Get user-specific course data to include progress
-      const userCourse = getUserCourseById(id?.toString() || "");
-      const userResources = userCourse?.course?.resources || [];
-
-      // Use resources from course data directly or use local state if needed
-      // To implement sequential locking, we need to know completion status
+      // Map course resources, merging in progress data
+      // Note: progress is embedded directly on each resource from the API
       const transformedLessons = courseResources.map((res: any, index: number) => {
-        // Favor progress from userResource if available
-        const userRes = userResources.find((ur: any) => ur.id === res.id);
-        const resourceWithProgress = userRes || res;
-        
-        const isCompleted = resourceWithProgress.progress?.is_completed === 1;
+        // is_completed comes back as boolean true/false from API
+        const isCompleted = res.progress?.is_completed === true || res.progress?.is_completed === 1;
+        const prevResource = index > 0 ? courseResources[index - 1] : null;
         const prevCompleted = index === 0 || 
-          (userResources.find((ur: any) => ur.id === courseResources[index - 1].id)?.progress?.is_completed === 1) ||
-          (courseResources[index - 1].progress?.is_completed === 1);
+          prevResource?.progress?.is_completed === true ||
+          prevResource?.progress?.is_completed === 1;
         
         return {
-          ...resourceWithProgress,
+          ...res,
           id: res.id.toString(),
           status: isCompleted ? 'completed' : prevCompleted ? 'not-started' : 'locked',
         };
       });
+
       setLessons(transformedLessons);
       
-      // If all lessons are completed, show the completion overlay automatically
-      const allCompleted = transformedLessons.length > 0 && transformedLessons.every((l: any) => l.status === 'completed');
+      // Auto-expand the module that contains the first active (not yet completed) lesson
+      const firstActiveLesson = transformedLessons.find(
+        (l: any) => l.status === 'in-progress' || l.status === 'not-started'
+      ) || transformedLessons[0];
       
+      if (firstActiveLesson?.parent_lesson_id) {
+        setExpandedModules({ [firstActiveLesson.parent_lesson_id.toString()]: true });
+      }
 
-
+      // If all lessons are completed, show the completion overlay
+      const allCompleted = transformedLessons.every((l: any) => l.status === 'completed');
       if (allCompleted && !isCoursePassed && !isReviewing) {
         setShowCompletionOverlay(true);
       }
 
+      // Set the first lesson as current if nothing is active yet
       if (transformedLessons.length > 0 && !currentLessonId) {
-        setCurrentLessonId(transformedLessons[0].id);
+        // Prefer the first non-completed lesson, else fall back to lesson 0
+        const firstIncomplete = transformedLessons.find((l: any) => l.status !== 'completed');
+        setCurrentLessonId(firstIncomplete ? firstIncomplete.id : transformedLessons[0].id);
       }
     }
   }, [fetchedCourse, id, getUserCourseById, assessmentResult]);
+
+
 
   useEffect(() => {
     if (videoRef.current) {
@@ -506,14 +582,23 @@ export default function ModuleDetailScreen() {
         if (newStatus.didJustFinish) {
             const currentIndex = lessons.findIndex(l => l.id === currentLessonId);
             const currentLesson = lessons[currentIndex];
+            const nextIndex = currentIndex + 1;
+            const nextLesson = nextIndex < lessons.length ? lessons[nextIndex] : null;
+            const isLastInModule = !nextLesson || nextLesson.parent_lesson_id !== currentLesson.parent_lesson_id;
             
             if (currentLesson.has_quiz) {
                 setShouldVideoPlay(false);
                 setActiveQuizResource(currentLesson);
                 setShowResourceQuizInstructions(true);
+            } else if (isLastInModule && currentLesson.has_module_quiz && currentLesson.module_quiz_data) {
+                setShouldVideoPlay(false);
+                setActiveQuizResource({
+                    ...currentLesson,
+                    title: `${currentLesson.parent_lesson_title} Quiz`,
+                });
+                setShowResourceQuizInstructions(true);
             } else {
                 // No quiz - mark as completed and move to next
-                const nextIndex = currentIndex + 1;
                 setLessons(prevLessons => {
                     const newLessons = [...prevLessons];
                     newLessons[currentIndex] = { ...newLessons[currentIndex], status: 'completed' };
@@ -583,10 +668,22 @@ export default function ModuleDetailScreen() {
       const targetLesson = lessons.find(l => l.id === resId);
       if (!targetLesson) return;
 
+      const currentIndex = lessons.findIndex(l => l.id === resId);
+      const nextIndex = currentIndex + 1;
+      const nextLesson = nextIndex < lessons.length ? lessons[nextIndex] : null;
+      const isLastInModule = !nextLesson || nextLesson.parent_lesson_id !== targetLesson.parent_lesson_id;
+
       // Check for quiz
       if (targetLesson.has_quiz) {
           setShouldVideoPlay(false);
           setActiveQuizResource(targetLesson);
+          setShowResourceQuizInstructions(true);
+      } else if (isLastInModule && targetLesson.has_module_quiz && targetLesson.module_quiz_data) {
+          setShouldVideoPlay(false);
+          setActiveQuizResource({
+              ...targetLesson,
+              title: `${targetLesson.parent_lesson_title} Quiz`,
+          });
           setShowResourceQuizInstructions(true);
       } else {
           // Mark the resource as complete in the tracking hook
@@ -609,22 +706,46 @@ export default function ModuleDetailScreen() {
   };
 
   // --- Resource Quiz Handlers ---
+  const handleSkipQuiz = async () => {
+    try {
+      if (activeQuizResource) {
+        if (activeQuizResource.has_module_quiz) {
+          await courseService.skipLessonQuiz(activeQuizResource.parent_lesson_id);
+        } else {
+          await courseService.skipResourceQuiz(activeQuizResource.id);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to skip quiz:', error);
+    }
+    setShowResourceQuizInstructions(false);
+    moveToNextResource();
+  };
+
   const handleStartResourceQuiz = async () => {
     if (!activeQuizResource) return;
     
     try {
-      const response = await courseService.getResourceQuiz(activeQuizResource.id);
-      if (response && response.questions) {
-        setQuizQuestions(response.questions);
+      if (activeQuizResource.has_module_quiz && activeQuizResource.module_quiz_data?.questions) {
+        setQuizQuestions(activeQuizResource.module_quiz_data.questions);
         setResourceQuizQuestionIndex(0);
         setResourceQuizSelectedOption(null);
         setUserAnswers({});
         setShowResourceQuizInstructions(false);
         setShowResourceQuiz(true);
       } else {
-        console.error('No questions found for this quiz');
-        // If no questions found but triggered, maybe just move on
-        moveToNextResource();
+        const response = await courseService.getResourceQuiz(activeQuizResource.id);
+        if (response && response.questions) {
+          setQuizQuestions(response.questions);
+          setResourceQuizQuestionIndex(0);
+          setResourceQuizSelectedOption(null);
+          setUserAnswers({});
+          setShowResourceQuizInstructions(false);
+          setShowResourceQuiz(true);
+        } else {
+          console.error('No questions found for this quiz');
+          moveToNextResource();
+        }
       }
     } catch (error) {
       console.error('Failed to start resource quiz:', error);
@@ -648,7 +769,12 @@ export default function ModuleDetailScreen() {
     } else {
       // Quiz finished - Submit
       try {
-        const response = await courseService.submitResourceQuiz(activeQuizResource.id, newUserAnswers);
+        let response;
+        if (activeQuizResource.has_module_quiz) {
+          response = await courseService.submitLessonQuiz(activeQuizResource.parent_lesson_id, newUserAnswers);
+        } else {
+          response = await courseService.submitResourceQuiz(activeQuizResource.id, newUserAnswers);
+        }
         console.log('[QUIZ] Submit response:', response);
         
         setQuizResult(response);
@@ -731,9 +857,15 @@ export default function ModuleDetailScreen() {
           // You might want to call refetch from hook or update store directly
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to submit assessment:', error);
-      toast.error("Failed to submit assessment. Please try again.");
+      // Extract the backend's reason message if available
+      const backendMessage =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        "Failed to submit assessment. Please try again.";
+      toast.error(backendMessage);
     } finally {
       setIsSubmittingAssessment(false);
     }
@@ -747,14 +879,26 @@ export default function ModuleDetailScreen() {
     setShowAssessment(true);
   };
 
-  const handleRetakeCourse = () => {
-    // Logic to reset course progress could be an API call
-    // For now, reset local state and navigate back or to first lesson
-    setAssessmentResult(null);
-    setIsReviewing(true);
-    setCurrentLessonId(lessons[0].id);
-    if (videoRef.current) {
-      videoRef.current.setPositionAsync(0);
+  const handleRetakeCourse = async () => {
+    try {
+      if (!id || !authToken) return;
+      
+      const res = await courseService.retakeCourse(id.toString(), authToken);
+      toast.success(res.message || "Course retake granted!");
+      
+      // Refresh course data from backend
+      await refetch();
+      
+      setAssessmentResult(null);
+      setIsReviewing(true);
+      setCurrentLessonId(lessons[0]?.id || null);
+      if (videoRef.current) {
+        videoRef.current.setPositionAsync(0);
+      }
+    } catch (error: any) {
+      const msg = error?.response?.data?.error || "Failed to retake course. Please try again.";
+      toast.error(msg);
+      console.error("Failed to retake course:", error);
     }
   };
 
@@ -1014,6 +1158,12 @@ export default function ModuleDetailScreen() {
                     </ThemedText>
                     
                     <View style={{flexDirection: 'row', gap: 16, width: '100%'}}>
+                        <Pressable 
+                            onPress={handleSkipQuiz}
+                            style={[styles.outlineButton, {flex: 1}]}
+                        >
+                            <Text style={{color: colors.primary, fontWeight: 'bold', fontSize: 16, textAlign: 'center'}}>Skip</Text>
+                        </Pressable>
                         <Pressable 
                             onPress={handleStartResourceQuiz}
                             style={[styles.primaryButton, {flex: 1, backgroundColor: colors.primary}] as any}
@@ -1352,10 +1502,12 @@ export default function ModuleDetailScreen() {
                     
                     <View style={{ gap: 12, width: '100%' }}>
                         <Pressable 
-                            onPress={() => {
+                            onPress={async () => {
                                 setShowCompletionOverlay(false);
                                 if (isCoursePassed) {
                                     setShowCertificateModal(true);
+                                } else if (!hasAttemptsLeft) {
+                                    await handleRetakeCourse();
                                 } else {
                                     startAssessment();
                                 }
@@ -1363,7 +1515,9 @@ export default function ModuleDetailScreen() {
                             style={[styles.primaryButton, { backgroundColor: colors.primary, width: '100%' } as any]}
                         >
                             <Text style={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>
-                                {isCoursePassed ? "View Certificate" : "Take Assessment"}
+                                {isCoursePassed 
+                                    ? "View Certificate" 
+                                    : (!hasAttemptsLeft ? "Retake Course" : "Take Assessment")}
                             </Text>
                         </Pressable>
                         
@@ -1531,81 +1685,98 @@ export default function ModuleDetailScreen() {
            {/* Tab Content */}
            {activeTab === 'lessons' && (
                <View>
-                <View style={{flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12}}>
-                    <Text style={{color: colors.textSecondary, fontSize: 12}}>Section 1 | {course.title}</Text>
-                    <Pressable>
-                      <Svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                        <Path fillRule="evenodd" clipRule="evenodd" d="M10 1.875C5.5125 1.875 1.875 5.5125 1.875 10C1.875 14.4875 5.5125 18.125 10 18.125C14.4875 18.125 18.125 14.4875 18.125 10C18.125 5.5125 14.4875 1.875 10 1.875ZM9.55833 13.5667C9.67552 13.6837 9.83437 13.7494 10 13.7494C10.1656 13.7494 10.3245 13.6837 10.4417 13.5667L12.9417 11.0667C13.0031 11.0094 13.0523 10.9404 13.0865 10.8638C13.1206 10.7871 13.139 10.7044 13.1405 10.6204C13.142 10.5365 13.1265 10.4532 13.0951 10.3753C13.0637 10.2975 13.0169 10.2268 12.9575 10.1675C12.8982 10.1081 12.8275 10.0613 12.7497 10.0299C12.6718 9.99846 12.5885 9.98303 12.5046 9.98451C12.4206 9.98599 12.3379 10.0044 12.2612 10.0385C12.1846 10.0727 12.1156 10.1219 12.0583 10.1833L10.625 11.6167V6.875C10.625 6.70924 10.5592 6.55027 10.4419 6.43306C10.3247 6.31585 10.1658 6.25 10 6.25C9.83424 6.25 9.67527 6.31585 9.55806 6.43306C9.44085 6.55027 9.375 6.70924 9.375 6.875V11.6167L7.94167 10.1833C7.82319 10.0729 7.66648 10.0128 7.50456 10.0157C7.34265 10.0185 7.18816 10.0841 7.07365 10.1986C6.95914 10.3132 6.89354 10.4676 6.89069 10.6296C6.88783 10.7915 6.94793 10.9482 7.05833 11.0667L9.55833 13.5667Z" fill="black"/>
-                      </Svg>
-                    </Pressable>
-                </View>
-                 {lessons.map((lesson, idx) => {
-                     return (
-                         <Pressable 
-                           key={lesson.id} 
-                           onPress={() => handleLessonPress(lesson.id)}
-                           style={[
-                               styles.lessonRow, 
-                               currentLessonId === lesson.id ? {backgroundColor: colors.bglight10} : { backgroundColor: 'transparent' },
-                               lesson.status === 'locked' && { opacity: 0.5 },
-                               (allResourcesWatched && !isReviewing) && { opacity: 0.6 }
-                           ]}
-                           disabled={lesson.status === 'locked' || (currentLesson.status === 'in-progress' && lesson.id !== currentLessonId) || (allResourcesWatched && !isReviewing)}
-                         >
-                            <ThemedText type="title" style={{fontSize: 24, marginRight: 16, width: 20}}>
-                                {
-                                    lesson.status === "completed" ?
-                                    <Svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                        <Path d="M19.8438 11.128C19.3389 12.9185 16.9523 14.1839 12.1798 16.7148C7.56574 19.1611 5.25888 20.3845 3.39973 19.8928C2.63115 19.6894 1.93086 19.3034 1.36606 18.7716C-4.25749e-07 17.4851 0 14.9899 0 9.99996C0 5.00998 -4.25749e-07 2.51479 1.36606 1.22842C1.93086 0.696592 2.63115 0.310509 3.39973 0.107224C5.25888 -0.38446 7.56574 0.838763 12.1798 3.28521C16.9523 5.81597 19.3389 7.0814 19.8438 8.87196C20.0521 9.6111 20.0521 10.3888 19.8438 11.128Z" fill="#5A7C65"/>
-                                    </Svg>
-                                    : lesson.status === "in-progress" ?
-                                    <Svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-                                        <Path d="M19.9999 36.6673C29.2047 36.6673 36.6666 29.2054 36.6666 20.0007C36.6666 10.7959 29.2047 3.33398 19.9999 3.33398C10.7952 3.33398 3.33325 10.7959 3.33325 20.0007C3.33325 29.2054 10.7952 36.6673 19.9999 36.6673Z" fill="#5A7C65" stroke="#5A7C65" strokeWidth="2.5"/>
-                                        <Path d="M15.8333 15V25V15ZM24.1666 15V25V15Z" fill="white"/>
-                                        <Path d="M15.8333 15V25M24.1666 15V25" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-                                    </Svg>
+                 {lessons.reduce((acc: any[], lesson: any, idx: number) => {
+                     const isNewModule = idx === 0 || lesson.parent_lesson_id !== lessons[idx - 1].parent_lesson_id;
+                     const moduleId = lesson.parent_lesson_id?.toString() || 'unknown';
+                     const isExpanded = expandedModules[moduleId];
+                     
+                     if (isNewModule) {
+                         acc.push(
+                            <Pressable 
+                                key={`header-${moduleId}`} 
+                                onPress={() => setExpandedModules(prev => ({ ...prev, [moduleId]: !prev[moduleId] }))}
+                                style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, marginTop: idx > 0 ? 16 : 0, backgroundColor: isExpanded ? colors.bglight01 : 'transparent', paddingHorizontal: 12, borderRadius: 8}}
+                             >
+                                 <Text style={{color: colors.textSecondary, fontSize: 14, fontWeight: 'bold'}}>
+                                     {lesson.parent_lesson_title || course.title}
+                                 </Text>
+                                 {isExpanded ? <ChevronUpIcon color={colors.textSecondary} /> : <ChevronDownIcon color={colors.textSecondary} />}
+                             </Pressable>
+                         );
+                     }
 
+                     if (isExpanded) {
+                         acc.push(
+                             <Pressable 
+                               key={lesson.id} 
+                               onPress={() => handleLessonPress(lesson.id)}
+                               style={[
+                                   styles.lessonRow, 
+                                   currentLessonId === lesson.id ? {backgroundColor: colors.bglight10} : { backgroundColor: 'transparent' },
+                                   lesson.status === 'locked' && { opacity: 0.5 },
+                                   (allResourcesWatched && !isReviewing) && { opacity: 0.6 }
+                               ]}
+                               disabled={lesson.status === 'locked' || (currentLesson?.status === 'in-progress' && lesson.id !== currentLessonId) || (allResourcesWatched && !isReviewing)}
+                             >
+                                <ThemedText type="title" style={{fontSize: 24, marginRight: 16, width: 20}}>
+                                    {
+                                        lesson.status === "completed" ?
+                                        <Svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                            <Path d="M19.8438 11.128C19.3389 12.9185 16.9523 14.1839 12.1798 16.7148C7.56574 19.1611 5.25888 20.3845 3.39973 19.8928C2.63115 19.6894 1.93086 19.3034 1.36606 18.7716C-4.25749e-07 17.4851 0 14.9899 0 9.99996C0 5.00998 -4.25749e-07 2.51479 1.36606 1.22842C1.93086 0.696592 2.63115 0.310509 3.39973 0.107224C5.25888 -0.38446 7.56574 0.838763 12.1798 3.28521C16.9523 5.81597 19.3389 7.0814 19.8438 8.87196C20.0521 9.6111 20.0521 10.3888 19.8438 11.128Z" fill="#5A7C65"/>
+                                        </Svg>
+                                        : lesson.status === "in-progress" ?
+                                        <Svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+                                            <Path d="M19.9999 36.6673C29.2047 36.6673 36.6666 29.2054 36.6666 20.0007C36.6666 10.7959 29.2047 3.33398 19.9999 3.33398C10.7952 3.33398 3.33325 10.7959 3.33325 20.0007C3.33325 29.2054 10.7952 36.6673 19.9999 36.6673Z" fill="#5A7C65" stroke="#5A7C65" strokeWidth="2.5"/>
+                                            <Path d="M15.8333 15V25V15ZM24.1666 15V25V15Z" fill="white"/>
+                                            <Path d="M15.8333 15V25M24.1666 15V25" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+                                        </Svg>
+                                        :
+                                        <>
+                                            {idx + 1}
+                                        </>
+                                    }
+                                </ThemedText>
+                                <View style={{flex: 1}}>
+                                    <ThemedText style={{fontWeight: '600'}}>{lesson.title}</ThemedText>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                      {lesson.duration ? <Text style={{color: colors.textSecondary, fontSize: 12}}>Videos - {lesson.duration}</Text> : null}
+                                      
+                                      {/* Mark Complete Button for active lesson after 30 secs */}
+                                      {currentLessonId === lesson.id && canMarkComplete && lesson.status !== 'completed' && (
+                                        <Pressable 
+                                          onPress={() => handleManualComplete(lesson.id)}
+                                          style={{ backgroundColor: colors.primary + '22', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: colors.primary }}
+                                        >
+                                          <Text style={{ color: colors.primary, fontSize: 10, fontWeight: 'bold' }}>Mark Complete</Text>
+                                        </Pressable>
+                                      )}
+                                    </View>
+                                 </View>
+                                {lesson.status === 'completed' ? 
+                                    <Svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                        <Path d="M15.8255 15.8327H15.8334H15.8255ZM15.8255 15.8327C15.3066 16.3473 14.3662 16.2191 13.7067 16.2191C12.8972 16.2191 12.5073 16.3774 11.9296 16.9552C11.4377 17.4472 10.7782 18.3327 10.0001 18.3327C9.222 18.3327 8.5625 17.4472 8.07056 16.9552C7.49282 16.3774 7.10299 16.2191 6.29346 16.2191C5.63398 16.2191 4.69356 16.3473 4.17466 15.8327C3.65159 15.314 3.78031 14.3697 3.78031 13.7059C3.78031 12.8672 3.59688 12.4815 2.99956 11.8842C2.11103 10.9957 1.66676 10.5513 1.66675 9.99935C1.66676 9.44727 2.11101 9.00302 2.99954 8.11449C3.53275 7.58128 3.78031 7.05292 3.78031 6.29273C3.78031 5.63322 3.65216 4.6928 4.16675 4.17388C4.68544 3.65083 5.62975 3.77957 6.29348 3.77957C7.05364 3.77957 7.58201 3.53202 8.11521 2.99882C9.00375 2.11028 9.448 1.66602 10.0001 1.66602C10.5522 1.66602 10.9964 2.11028 11.8849 2.99882C12.418 3.53191 12.9463 3.77957 13.7067 3.77957C14.3662 3.77957 15.3067 3.65141 15.8256 4.16602C16.3486 4.68471 16.2198 5.62901 16.2198 6.29273C16.2198 7.1315 16.4033 7.51716 17.0006 8.11449C17.8892 9.00302 18.3334 9.44727 18.3334 9.99935C18.3334 10.5513 17.8892 10.9957 17.0006 11.8842C16.4032 12.4815 16.2198 12.8672 16.2198 13.7059C16.2198 14.3697 16.3486 15.314 15.8255 15.8327Z" fill="#34A853"/>
+                                        <Path d="M15.8255 15.8327H15.8334M15.8255 15.8327C15.3066 16.3473 14.3662 16.2191 13.7067 16.2191C12.8972 16.2191 12.5073 16.3774 11.9296 16.9552C11.4377 17.4472 10.7782 18.3327 10.0001 18.3327C9.222 18.3327 8.5625 17.4472 8.07056 16.9552C7.49281 16.3774 7.10299 16.2191 6.29346 16.2191C5.63398 16.2191 4.69356 16.3473 4.17466 15.8327C3.65159 15.314 3.78031 14.3697 3.78031 13.7059C3.78031 12.8672 3.59688 12.4815 2.99956 11.8842C2.11103 10.9957 1.66676 10.5513 1.66675 9.99935C1.66676 9.44727 2.11101 9.00302 2.99954 8.11449C3.53275 7.58128 3.78031 7.05292 3.78031 6.29273C3.78031 5.63322 3.65216 4.6928 4.16675 4.17388C4.68544 3.65083 5.62975 3.77957 6.29348 3.77957C7.05364 3.77957 7.58201 3.53202 8.11521 2.99882C9.00375 2.11028 9.448 1.66602 10.0001 1.66602C10.5522 1.66602 10.9964 2.11028 11.8849 2.99882C12.418 3.53191 12.9463 3.77957 13.7067 3.77957C14.3662 3.77957 15.3067 3.65141 15.8256 4.16602C16.3486 4.68471 16.2198 5.62901 16.2198 6.29273C16.2198 7.1315 16.4033 7.51716 17.0006 8.11449C17.8892 9.00302 18.3334 9.44727 18.3334 9.99935C18.3334 10.5513 17.8892 10.9957 17.0006 11.8842C16.4032 12.4815 16.2198 12.8672 16.2198 13.7059C16.2198 14.3697 16.3486 15.314 15.8255 15.8327Z" stroke="#34A853" strokeWidth="1.25"/>
+                                        <Path d="M7.5 10.7434L9 12.0827L12.5 7.91602" stroke="white" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+                                    </Svg>
                                     :
-                                    <>
-                                        {idx + 1}
-                                    </>
-                                }
-                            </ThemedText>
-                            <View style={{flex: 1}}>
-                                <ThemedText style={{fontWeight: '600'}}>{lesson.title}</ThemedText>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                  {lesson.duration ? <Text style={{color: colors.textSecondary, fontSize: 12}}>Videos - {lesson.duration}</Text> : null}
-                                  
-                                  {/* Mark Complete Button for active lesson after 30 secs */}
-                                  {currentLessonId === lesson.id && canMarkComplete && lesson.status !== 'completed' && (
-                                    <Pressable 
-                                      onPress={() => handleManualComplete(lesson.id)}
-                                      style={{ backgroundColor: colors.primary + '22', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: colors.primary }}
-                                    >
-                                      <Text style={{ color: colors.primary, fontSize: 10, fontWeight: 'bold' }}>Mark Complete</Text>
+                                    <Pressable>
+                                      <Svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                        <Path fillRule="evenodd" clipRule="evenodd" d="M10 1.875C5.5125 1.875 1.875 5.5125 1.875 10C1.875 14.4875 5.5125 18.125 10 18.125C14.4875 18.125 18.125 14.4875 18.125 10C18.125 5.5125 14.4875 1.875 10 1.875ZM9.55833 13.5667C9.67552 13.6837 9.83437 13.7494 10 13.7494C10.1656 13.7494 10.3245 13.6837 10.4417 13.5667L12.9417 11.0667C13.0031 11.0094 13.0523 10.9404 13.0865 10.8638C13.1206 10.7871 13.139 10.7044 13.1405 10.6204C13.142 10.5365 13.1265 10.4532 13.0951 10.3753C13.0637 10.2975 13.0169 10.2268 12.9575 10.1675C12.8982 10.1081 12.8275 10.0613 12.7497 10.0299C12.6718 9.99846 12.5885 9.98303 12.5046 9.98451C12.4206 9.98599 12.3379 10.0044 12.2612 10.0385C12.1846 10.0727 12.1156 10.1219 12.0583 10.1833L10.625 11.6167V6.875C10.625 6.70924 10.5592 6.55027 10.4419 6.43306C10.3247 6.31585 10.1658 6.25 10 6.25C9.83424 6.25 9.67527 6.31585 9.55806 6.43306C9.44085 6.55027 9.375 6.70924 9.375 6.875V11.6167L7.94167 10.1833C7.82319 10.0729 7.66648 10.0128 7.50456 10.0157C7.34265 10.0185 7.18816 10.0841 7.07365 10.1986C6.95914 10.3132 6.89354 10.4676 6.89069 10.6296C6.88783 10.7915 6.94793 10.9482 7.05833 11.0667L9.55833 13.5667Z" fill="black"/>
+                                      </Svg>
                                     </Pressable>
-                                  )}
-                                </View>
-                             </View>
-                            {lesson.status === 'completed' ? 
-                                <Svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                    <Path d="M15.8255 15.8327H15.8334H15.8255ZM15.8255 15.8327C15.3066 16.3473 14.3662 16.2191 13.7067 16.2191C12.8972 16.2191 12.5073 16.3774 11.9296 16.9552C11.4377 17.4472 10.7782 18.3327 10.0001 18.3327C9.222 18.3327 8.5625 17.4472 8.07056 16.9552C7.49282 16.3774 7.10299 16.2191 6.29346 16.2191C5.63398 16.2191 4.69356 16.3473 4.17466 15.8327C3.65159 15.314 3.78031 14.3697 3.78031 13.7059C3.78031 12.8672 3.59688 12.4815 2.99956 11.8842C2.11103 10.9957 1.66676 10.5513 1.66675 9.99935C1.66676 9.44727 2.11101 9.00302 2.99954 8.11449C3.53275 7.58128 3.78031 7.05292 3.78031 6.29273C3.78031 5.63322 3.65216 4.6928 4.16675 4.17388C4.68544 3.65083 5.62975 3.77957 6.29348 3.77957C7.05364 3.77957 7.58201 3.53202 8.11521 2.99882C9.00375 2.11028 9.448 1.66602 10.0001 1.66602C10.5522 1.66602 10.9964 2.11028 11.8849 2.99882C12.418 3.53191 12.9463 3.77957 13.7067 3.77957C14.3662 3.77957 15.3067 3.65141 15.8256 4.16602C16.3486 4.68471 16.2198 5.62901 16.2198 6.29273C16.2198 7.1315 16.4033 7.51716 17.0006 8.11449C17.8892 9.00302 18.3334 9.44727 18.3334 9.99935C18.3334 10.5513 17.8892 10.9957 17.0006 11.8842C16.4032 12.4815 16.2198 12.8672 16.2198 13.7059C16.2198 14.3697 16.3486 15.314 15.8255 15.8327Z" fill="#34A853"/>
-                                    <Path d="M15.8255 15.8327H15.8334M15.8255 15.8327C15.3066 16.3473 14.3662 16.2191 13.7067 16.2191C12.8972 16.2191 12.5073 16.3774 11.9296 16.9552C11.4377 17.4472 10.7782 18.3327 10.0001 18.3327C9.222 18.3327 8.5625 17.4472 8.07056 16.9552C7.49281 16.3774 7.10299 16.2191 6.29346 16.2191C5.63398 16.2191 4.69356 16.3473 4.17466 15.8327C3.65159 15.314 3.78031 14.3697 3.78031 13.7059C3.78031 12.8672 3.59688 12.4815 2.99956 11.8842C2.11103 10.9957 1.66676 10.5513 1.66675 9.99935C1.66676 9.44727 2.11101 9.00302 2.99954 8.11449C3.53275 7.58128 3.78031 7.05292 3.78031 6.29273C3.78031 5.63322 3.65216 4.6928 4.16675 4.17388C4.68544 3.65083 5.62975 3.77957 6.29348 3.77957C7.05364 3.77957 7.58201 3.53202 8.11521 2.99882C9.00375 2.11028 9.448 1.66602 10.0001 1.66602C10.5522 1.66602 10.9964 2.11028 11.8849 2.99882C12.418 3.53191 12.9463 3.77957 13.7067 3.77957C14.3662 3.77957 15.3067 3.65141 15.8256 4.16602C16.3486 4.68471 16.2198 5.62901 16.2198 6.29273C16.2198 7.1315 16.4033 7.51716 17.0006 8.11449C17.8892 9.00302 18.3334 9.44727 18.3334 9.99935C18.3334 10.5513 17.8892 10.9957 17.0006 11.8842C16.4032 12.4815 16.2198 12.8672 16.2198 13.7059C16.2198 14.3697 16.3486 15.314 15.8255 15.8327Z" stroke="#34A853" strokeWidth="1.25"/>
-                                    <Path d="M7.5 10.7434L9 12.0827L12.5 7.91602" stroke="white" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
-                                </Svg>
-                                :
-                                <Pressable>
-                                  <Svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                    <Path fillRule="evenodd" clipRule="evenodd" d="M10 1.875C5.5125 1.875 1.875 5.5125 1.875 10C1.875 14.4875 5.5125 18.125 10 18.125C14.4875 18.125 18.125 14.4875 18.125 10C18.125 5.5125 14.4875 1.875 10 1.875ZM9.55833 13.5667C9.67552 13.6837 9.83437 13.7494 10 13.7494C10.1656 13.7494 10.3245 13.6837 10.4417 13.5667L12.9417 11.0667C13.0031 11.0094 13.0523 10.9404 13.0865 10.8638C13.1206 10.7871 13.139 10.7044 13.1405 10.6204C13.142 10.5365 13.1265 10.4532 13.0951 10.3753C13.0637 10.2975 13.0169 10.2268 12.9575 10.1675C12.8982 10.1081 12.8275 10.0613 12.7497 10.0299C12.6718 9.99846 12.5885 9.98303 12.5046 9.98451C12.4206 9.98599 12.3379 10.0044 12.2612 10.0385C12.1846 10.0727 12.1156 10.1219 12.0583 10.1833L10.625 11.6167V6.875C10.625 6.70924 10.5592 6.55027 10.4419 6.43306C10.3247 6.31585 10.1658 6.25 10 6.25C9.83424 6.25 9.67527 6.31585 9.55806 6.43306C9.44085 6.55027 9.375 6.70924 9.375 6.875V11.6167L7.94167 10.1833C7.82319 10.0729 7.66648 10.0128 7.50456 10.0157C7.34265 10.0185 7.18816 10.0841 7.07365 10.1986C6.95914 10.3132 6.89354 10.4676 6.89069 10.6296C6.88783 10.7915 6.94793 10.9482 7.05833 11.0667L9.55833 13.5667Z" fill="black"/>
-                                  </Svg>
-                                </Pressable>
-                            }
-                         </Pressable>
-                     )
-                 })}
+                                }
+                             </Pressable>
+                         );
+                     }
+                     return acc;
+                 }, [])}
                  {/* Simulate finish course button for demo */}
                  <Pressable 
-                    onPress={isCoursePassed ? () => setShowCertificateModal(true) : handleFinishCourse} 
+                    onPress={
+                        isCoursePassed 
+                            ? () => setShowCertificateModal(true) 
+                            : (!hasAttemptsLeft ? handleRetakeCourse : handleFinishCourse)
+                    } 
                     disabled={(!lessons.every(l => l.status === 'completed')) && !isCoursePassed}
                     style={[
                         styles.primaryButton, 
@@ -1614,7 +1785,9 @@ export default function ModuleDetailScreen() {
                     ]}
                  >
                      <Text style={{color: 'white', textAlign: 'center'}}>
-                        {isCoursePassed ? "View Certificate" : "Take Assessment"}
+                        {isCoursePassed 
+                            ? "View Certificate" 
+                            : (!hasAttemptsLeft ? "Retake Course" : "Take Assessment")}
                      </Text>
                  </Pressable>
                </View>
@@ -1622,7 +1795,6 @@ export default function ModuleDetailScreen() {
 
            {activeTab === 'resources' && (
                <View>
-                    <Text style={{color: colors.textSecondary, fontSize: 12, marginBottom: 10}}>Section 1 | Intro to Financial Literacy</Text>
                    {course.resources.map((res: any, idx: number) => (
                        <View key={res.id} style={{marginBottom: 0, backgroundColor: expandedResource === res.id ? colors.bglight01 : 'transparent', borderRadius: 8}}>
                            <Pressable 
@@ -1632,12 +1804,12 @@ export default function ModuleDetailScreen() {
                                <ThemedText style={{fontSize: 24, fontWeight: 'bold', marginRight: 16}}>{idx + 1}</ThemedText>
                                <View style={{flex: 1}}>
                                    <ThemedText style={{fontWeight: '600'}}>{res.title}</ThemedText>
-                                   <Text style={{color: colors.textSecondary, fontSize: 12}}>Lorem ipsum dolor sit amet consectetur.</Text>
+                                   <Text style={{color: colors.textSecondary, fontSize: 12}} numberOfLines={1}>{res.description}</Text>
                                </View>
                                {expandedResource === res.id ? <ChevronUpIcon color={colors.textSecondary} /> : <ChevronDownIcon color={colors.textSecondary} />}
                            </Pressable>
                            {expandedResource === res.id && (
-                               <View style={{padding: 16, paddingTop: 0}}>
+                               <View style={{padding: 16, paddingTop: 0, paddingLeft: 48}}>
                                    <Text style={{color: colors.textSecondary, marginBottom: 12}}>{res.description}</Text>
                                    <Pressable style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
                                        <View style={{width: 24, height: 24, borderRadius: 12, backgroundColor: '#5A7C65', justifyContent: 'center', alignItems: 'center'}}>

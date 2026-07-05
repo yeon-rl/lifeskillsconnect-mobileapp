@@ -90,25 +90,26 @@ export default function AllModules() {
   const renderSection = (title: string, data: CourseProp[]) => (
     <View style={styles.sectionContainer} className='mt-5'>
       <ThemedText type="subtitle" style={styles.sectionTitle}>{title}</ThemedText>
-      <FlatList
+      <ScrollView
         horizontal
-        data={data}
-        keyExtractor={(item) => item.id.toString()}
         showsHorizontalScrollIndicator={false}
+        scrollEventThrottle={16}
+        decelerationRate="fast"
+        snapToInterval={300}
         contentContainerStyle={styles.listContent}
-        renderItem={({ item }) => (
-          <View style={{ marginRight: 16 }}>
-            <CardComponent2
-              title={item.title}
-              rating={item.averageRating}
-              reviews={item.reviewCount}
-              isPremium={item.is_paid === 1}
-              image={item.thumbnail}
-              onViewModule={() => navigateToDetail(item.id.toString())}
-            />
-          </View>
-        )}
-      />
+      >
+        {data.map((item) => (
+          <CardComponent2
+            key={item.id.toString()}
+            title={item.title}
+            rating={item.averageRating}
+            reviews={item.reviewCount}
+            isPremium={item.is_paid === 1}
+            image={item.thumbnail}
+            onViewModule={() => navigateToDetail(item.id.toString())}
+          />
+        ))}
+      </ScrollView>
     </View>
   );
 

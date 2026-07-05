@@ -29,7 +29,7 @@ export const useFetchCourses = (forceRefresh: boolean = false) => {
 
     try {
       const data = await courseService.getAllCourses();
-      // console.log('API Response for getAllCourses:', JSON.stringify(data, null, 2));
+      console.log('📚 [getAllCourses] RAW API response:', JSON.stringify(data, null, 2));
       setCourses(data);
       // console.log('Courses fetched and stored successfully:', Array.isArray(data) ? data.length : 'NOT AN ARRAY');
     } catch (err: any) {
@@ -159,6 +159,8 @@ export const useFetchUserCourses = (userId: string | number | null | undefined) 
       }
       
       setUserCourses(normalizedData);
+      console.log('👤 [getUserCourses] RAW API response:', JSON.stringify(data, null, 2));
+      console.log('👤 [getUserCourses] Normalized data:', JSON.stringify(normalizedData, null, 2));
       console.log('User courses fetched and stored successfully:', normalizedData?.subscriptions?.length || 0);
     } catch (err: any) {
       const errorMessage = err?.response?.data?.message || err?.message || 'Failed to fetch user courses';

@@ -346,7 +346,7 @@ export default function Profile() {
             }
             color="#0A55D0" 
             label="Reset Password" 
-            onPress={() => router.push('/reset-password')}
+            onPress={() => router.push('/change-password')}
             textColor={colors.text}
           />
           

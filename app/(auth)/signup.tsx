@@ -7,6 +7,8 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import * as AppleAuthentication from 'expo-apple-authentication';
+
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -382,6 +384,19 @@ export default function SignupScreen() {
   const router = useRouter();
   const { step } = useLocalSearchParams<{ step?: string }>();
 
+  // Configure Google Sign-In
+  useEffect(() => {
+    try {
+      const { GoogleSignin } = require('@react-native-google-signin/google-signin');
+      GoogleSignin.configure({
+        webClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+        iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+      });
+    } catch (e) {
+      // Native module not available (e.g. Expo Go) - Google Sign-In will be disabled
+    }
+  }, []);
+
   // If arriving from social sign-in (new user), jump directly to the account step
   useEffect(() => {
     if (step === 'account') {
@@ -469,6 +484,119 @@ export default function SignupScreen() {
       const newInterests = [...selectedInterests, selectedInterestDetail.id];
       setSelectedInterests(newInterests);
       setModalVisible(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      setLoading(true);
+
+      let GoogleSignin: any;
+      try {
+        GoogleSignin = require('@react-native-google-signin/google-signin').GoogleSignin;
+      } catch (e) {
+        toast.error("Google Sign-In is not available in Expo Go. Please use the native build.");
+        return;
+      }
+
+      await GoogleSignin.hasPlayServices();
+      const userInfo = await GoogleSignin.signIn();
+
+      if (!userInfo.data?.idToken) {
+        throw new Error("Google Sign-In failed: No identity token received");
+      }
+
+      const response = await authService.googleAuth({ 
+        token: userInfo.data.idToken,
+        user: userInfo.data.user ? {
+          firstName: userInfo.data.user.givenName,
+          lastName: userInfo.data.user.familyName,
+          email: userInfo.data.user.email
+        } : undefined
+      });
+
+      const { user, token, isNewUser } = response.data || response;
+
+      if (token && user) {
+        setAuthToken(token);
+        setUser(user, false);
+        setAuthenticated(true);
+        if (isNewUser) {
+          toast.success("Welcome! Let's set up your profile.");
+          setTimeout(() => {
+            router.replace("/(auth)/signup?step=account");
+          }, 1500);
+        } else {
+          toast.success("Logged in with Google!");
+          setTimeout(() => {
+            router.replace("/(tabs)");
+          }, 1500);
+        }
+      } else {
+        throw new Error("Invalid response from server");
+      }
+    } catch (error: any) {
+      if (error.code === 'SIGN_IN_CANCELLED') {
+        // user cancelled the login flow
+      } else {
+        console.error("Google Sign-In error:", error);
+        toast.error(error.message || "Google Sign-In failed");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    try {
+      setLoading(true);
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      if (!credential.identityToken) {
+        throw new Error("Apple Sign-In failed: No identity token received");
+      }
+
+      const response = await authService.appleAuth({ 
+        token: credential.identityToken,
+        user: credential.fullName ? {
+          firstName: credential.fullName.givenName,
+          lastName: credential.fullName.familyName,
+          email: credential.email
+        } : undefined
+      });
+
+      const { user, token, isNewUser } = response.data || response;
+
+      if (token && user) {
+        setAuthToken(token);
+        setUser(user, false);
+        setAuthenticated(true);
+        if (isNewUser) {
+          toast.success("Welcome! Let's set up your profile.");
+          setCurrentStep("account");
+        } else {
+          toast.success("Logged in with Apple!");
+          setTimeout(() => {
+            router.replace("/(tabs)");
+          }, 1500);
+        }
+      } else {
+        throw new Error("Invalid response from server");
+      }
+    } catch (error: any) {
+      if (error.code === 'ERR_REQUEST_CANCELED') {
+        // user cancelled the login flow
+      } else {
+        console.error("Apple Sign-In error:", error);
+        toast.error(error.message || "Apple Sign-In failed");
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -852,25 +980,47 @@ export default function SignupScreen() {
 
 
 
-          {/* Apple Button */}
-          {/* <Pressable
-            className="flex-row items-center justify-center rounded-lg py-4"
-            style={{ backgroundColor: "#5A7C651A" }}
-          >
-            <Svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-              <Path
-                d="M30 16C30 23.728 23.735 30 16 30C8.265 30 2 23.728 2 16C2 8.265 8.265 2 16 2C23.735 2 30 8.265 30 16Z"
-                fill="#333333"
-              />
-              <Path
-                d="M22.5621 12.4574C22.4857 12.502 20.6671 13.4425 20.6671 15.5279C20.7528 17.9061 22.9621 18.7401 23 18.7401C22.9621 18.7847 22.6665 19.8763 21.7907 21.0205C21.0956 22.0062 20.3242 23 19.1528 23C18.0385 23 17.6385 22.3431 16.3528 22.3431C14.972 22.3431 14.5813 23 13.5242 23C12.3528 23 11.5242 21.953 10.7913 20.9766C9.8391 19.6986 9.02978 17.6931 9.00121 15.7675C8.98195 14.7471 9.19189 13.744 9.72481 12.8921C10.477 11.7026 11.8198 10.8952 13.2863 10.8686C14.4099 10.8333 15.4099 11.5875 16.0956 11.5875C16.7528 11.5875 17.9814 10.8686 19.3714 10.8686C19.9714 10.8692 21.5714 11.0376 22.5621 12.4574ZM16.0006 10.6649C15.8006 9.73303 16.3528 8.80119 16.8671 8.20677C17.5242 7.48792 18.5621 7 19.4571 7C19.5143 7.93185 19.1522 8.84575 18.505 9.51136C17.9242 10.2302 16.9242 10.7714 16.0006 10.6649Z"
-                fill="white"
-              />
-            </Svg>
-            <ThemedText type="small" className="font-semibold text-base ml-2">
-              Sign up with Apple
-            </ThemedText>
-          </Pressable> */}
+      {/* Google Sign In Button */}
+      <Pressable
+        className="flex-row items-center justify-center rounded-lg py-4 mb-4"
+        style={{ backgroundColor: colors.text }}
+        onPress={handleGoogleSignIn}
+        disabled={loading}
+      >
+        <Svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <Path d="M22.501 12.2331C22.501 11.3698 22.4296 10.7398 22.2748 10.0864H12.2153V13.983H18.12C18.001 14.9514 17.3582 16.4097 15.9296 17.3897L15.9096 17.5202L19.0902 19.9349L19.3106 19.9564C21.3343 18.1247 22.501 15.4297 22.501 12.2331Z" fill="#4285F4"/>
+          <Path d="M12.214 22.5001C15.1068 22.5001 17.5353 21.5667 19.3092 19.9567L15.9282 17.39C15.0235 18.0083 13.8092 18.44 12.214 18.44C9.38069 18.44 6.97596 16.6083 6.11874 14.0767L5.99309 14.0871L2.68583 16.5955L2.64258 16.7133C4.40446 20.1433 8.0235 22.5001 12.214 22.5001Z" fill="#34A853"/>
+          <Path d="M6.12046 14.0765C5.89428 13.4232 5.76337 12.7231 5.76337 11.9998C5.76337 11.2764 5.89428 10.5765 6.10856 9.92313L6.10257 9.78398L2.75386 7.23535L2.64429 7.28642C1.91814 8.70977 1.50146 10.3081 1.50146 11.9998C1.50146 13.6915 1.91814 15.2897 2.64429 16.7131L6.12046 14.0765Z" fill="#FBBC05"/>
+          <Path d="M12.2141 5.55997C14.2259 5.55997 15.583 6.41163 16.3569 7.12335L19.3807 4.23C17.5236 2.53834 15.1069 1.5 12.2141 1.5C8.02353 1.5 4.40447 3.85665 2.64258 7.28662L6.10686 9.92332C6.97598 7.39166 9.38073 5.55997 12.2141 5.55997Z" fill="#EB4335"/>
+        </Svg>
+        <ThemedText type="small14" className="font-semibold text-base ml-2" style={{ color: colors.background }}>
+          Sign up with Google
+        </ThemedText>
+      </Pressable>
+
+      {/* Apple Sign Up Button */}
+      {Platform.OS === 'ios' && (
+        <Pressable
+          className="flex-row items-center justify-center rounded-lg py-4"
+          style={{ backgroundColor: "#5A7C651A" }}
+          onPress={handleAppleSignIn}
+          disabled={loading}
+        >
+          <Svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+            <Path
+              d="M30 16C30 23.728 23.735 30 16 30C8.265 30 2 23.728 2 16C2 8.265 8.265 2 16 2C23.735 2 30 8.265 30 16Z"
+              fill="#333333"
+            />
+            <Path
+              d="M22.5621 12.4574C22.4857 12.502 20.6671 13.4425 20.6671 15.5279C20.7528 17.9061 22.9621 18.7401 23 18.7401C22.9621 18.7847 22.6665 19.8763 21.7907 21.0205C21.0956 22.0062 20.3242 23 19.1528 23C18.0385 23 17.6385 22.3431 16.3528 22.3431C14.972 22.3431 14.5813 23 13.5242 23C12.3528 23 11.5242 21.953 10.7913 20.9766C9.8391 19.6986 9.02978 17.6931 9.00121 15.7675C8.98195 14.7471 9.19189 13.744 9.72481 12.8921C10.477 11.7026 11.8198 10.8952 13.2863 10.8686C14.4099 10.8333 15.4099 11.5875 16.0956 11.5875C16.7528 11.5875 17.9814 10.8686 19.3714 10.8686C19.9714 10.8692 21.5714 11.0376 22.5621 12.4574ZM16.0006 10.6649C15.8006 9.73303 16.3528 8.80119 16.8671 8.20677C17.5242 7.48792 18.5621 7 19.4571 7C19.5143 7.93185 19.1522 8.84575 18.505 9.51136C17.9242 10.2302 16.9242 10.7714 16.0006 10.6649Z"
+              fill="white"
+            />
+          </Svg>
+          <ThemedText type="small" className="font-semibold text-base ml-2">
+            Sign up with Apple
+          </ThemedText>
+        </Pressable>
+      )}
 
           <View className="flex-row justify-center mt-5">
             <ThemedText className="text-gray-700" type="small">
