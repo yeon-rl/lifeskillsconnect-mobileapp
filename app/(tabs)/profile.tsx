@@ -290,25 +290,6 @@ export default function Profile() {
             textColor={colors.text}
           />
 
-          <MenuItem 
-            icon={
-              <Ionicons name="heart-outline" size={20} color="white" />
-            }
-            color="#E11D48" 
-            label="Wellbeing Check" 
-            onPress={() => router.push('/wellbeing-check')}
-            textColor={colors.text}
-          />
-
-          <MenuItem 
-            icon={
-              <Ionicons name="briefcase-outline" size={20} color="white" />
-            }
-            color="#2563EB" 
-            label="Job Feeds" 
-            onPress={() => router.push('/(tabs)/jobs')}
-            textColor={colors.text}
-          />
 
           <MenuItem 
             icon={
@@ -321,7 +302,7 @@ export default function Profile() {
             } 
             color="#34A853" 
             label="Support & Help" 
-            // onPress={() => router.push('/support')}
+            onPress={() => router.push('/support')}
             textColor={colors.text}
           />
           
@@ -463,7 +444,7 @@ const styles = StyleSheet.create({
     fontWeight: 500,
   },
   scrollContent: {
-    paddingBottom: 40,
+    paddingBottom: 120,
   },
   userInfoContainer: {
     flexDirection: 'row',

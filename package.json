@@ -8,7 +8,9 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "build:ios": "bash scripts/build-ios.sh production",
+    "build:ios:preview": "bash scripts/build-ios.sh preview"
   },
   "dependencies": {
     "@expo/html-elements": "^0.10.1",

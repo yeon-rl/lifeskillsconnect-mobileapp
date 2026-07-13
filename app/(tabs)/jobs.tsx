@@ -46,7 +46,8 @@ export default function JobsScreen() {
 
         if (reverseGeocode.length > 0) {
           const item = reverseGeocode[0];
-          const city = item.city || item.region || item.district || '';
+          // Use city or subregion (county/state area) — avoid district which maps to local gov areas
+          const city = item.city || item.subregion || item.region || '';
           const country = item.country || '';
           if (city) {
             setDetectedLocation(country ? `${city}, ${country}` : city);
@@ -58,16 +59,17 @@ export default function JobsScreen() {
     })();
   }, []);
 
-  const filteredJobs = jobs; // Now handled by the hook filters
+  // Filter out expired jobs (0 days left)
+  const filteredJobs = jobs.filter(job => job.daysLeft > 0);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={[styles.backButton, { backgroundColor: colors.modalBg }]} onPress={() => router.back()}>
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Job Feed</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Job Feeds</Text>
       </View>
 
       <ScrollView 
@@ -77,12 +79,12 @@ export default function JobsScreen() {
         }
       >
         {/* Search Bar */}
-        <View style={[styles.searchContainer, { backgroundColor: '#F2F4F5' }]}>
-          <Ionicons name="search-outline" size={20} color="#9EA3A7" />
+        <View style={[styles.searchContainer, { backgroundColor: colors.modalBg }]}>
+          <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
           <TextInput
             placeholder="Search"
-            placeholderTextColor="#9EA3A7"
-            style={styles.searchInput}
+            placeholderTextColor={colors.textSecondary}
+            style={[styles.searchInput, { color: colors.text }]}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
@@ -101,7 +103,7 @@ export default function JobsScreen() {
             >
               <Text style={[
                 styles.tabText,
-                { color: activeTab === tab ? '#1A1C1E' : '#9EA3A7' },
+                { color: activeTab === tab ? colors.text : colors.textSecondary },
                 activeTab === tab && styles.activeTabText
               ]}>
                 {tab}
@@ -118,29 +120,29 @@ export default function JobsScreen() {
           style={styles.filtersScrollView}
           contentContainerStyle={styles.filtersScrollContent}
         >
-          <View style={[styles.filterChip, { backgroundColor: displayLocation ? '#E8F0FE' : '#F2F4F5', borderColor: displayLocation ? '#4285F4' : '#E1E4E8' }]}>
-            <Ionicons name="location-outline" size={16} color={displayLocation ? "#4285F4" : "#9EA3A7"} />
-            <Text style={[styles.filterText, { color: displayLocation ? '#4285F4' : '#6C7278' }]}>
+          <View style={[styles.filterChip, { backgroundColor: displayLocation ? colors.tagBg : colors.modalBg, borderColor: displayLocation ? '#4285F4' : colors.gray250 }]}>
+            <Ionicons name="location-outline" size={16} color={displayLocation ? "#4285F4" : colors.textSecondary} />
+            <Text style={[styles.filterText, { color: displayLocation ? '#4285F4' : colors.textSecondary }]}>
               {displayLocation || 'Location not set'}
             </Text>
           </View>
           <TouchableOpacity 
-            style={[styles.filterChip, { backgroundColor: selectedRoleType !== 'All' ? '#E8F0FE' : 'transparent', borderColor: selectedRoleType !== 'All' ? '#4285F4' : '#E1E4E8' }]}
+            style={[styles.filterChip, { backgroundColor: selectedRoleType !== 'All' ? colors.tagBg : colors.modalBg, borderColor: selectedRoleType !== 'All' ? '#4285F4' : colors.gray250 }]}
             onPress={() => setActivePicker('role')}
           >
-            <Text style={[styles.filterText, { color: selectedRoleType !== 'All' ? '#4285F4' : '#6C7278' }]}>
+            <Text style={[styles.filterText, { color: selectedRoleType !== 'All' ? '#4285F4' : colors.textSecondary }]}>
               {selectedRoleType === 'All' ? 'Role Type' : selectedRoleType}
             </Text>
-            <Ionicons name="chevron-down" size={16} color={selectedRoleType !== 'All' ? "#4285F4" : "#9EA3A7"} />
+            <Ionicons name="chevron-down" size={16} color={selectedRoleType !== 'All' ? "#4285F4" : colors.textSecondary} />
           </TouchableOpacity>
           <TouchableOpacity 
-            style={[styles.filterChip, { backgroundColor: selectedDateRange !== 'All' ? '#E8F0FE' : 'transparent', borderColor: selectedDateRange !== 'All' ? '#4285F4' : '#E1E4E8' }]}
+            style={[styles.filterChip, { backgroundColor: selectedDateRange !== 'All' ? colors.tagBg : colors.modalBg, borderColor: selectedDateRange !== 'All' ? '#4285F4' : colors.gray250 }]}
             onPress={() => setActivePicker('date')}
           >
-            <Text style={[styles.filterText, { color: selectedDateRange !== 'All' ? '#4285F4' : '#6C7278' }]}>
+            <Text style={[styles.filterText, { color: selectedDateRange !== 'All' ? '#4285F4' : colors.textSecondary }]}>
               {selectedDateRange === 'All' ? 'Date Posted' : selectedDateRange}
             </Text>
-            <Ionicons name="chevron-down" size={16} color={selectedDateRange !== 'All' ? "#4285F4" : "#9EA3A7"} />
+            <Ionicons name="chevron-down" size={16} color={selectedDateRange !== 'All' ? "#4285F4" : colors.textSecondary} />
           </TouchableOpacity>
         </ScrollView>
 
@@ -162,7 +164,7 @@ export default function JobsScreen() {
 
         {/* Result Summary */}
         <View style={styles.resultSummary}>
-          <Text style={styles.resultCount}>{filteredJobs.length} result</Text>
+          <Text style={[styles.resultCount, { color: colors.textSecondary }]}>{filteredJobs.length} result</Text>
         </View>
 
         {/* Job List */}
@@ -180,13 +182,13 @@ export default function JobsScreen() {
                 <Text style={{ color: 'white', fontWeight: 'bold' }}>Try Again</Text>
               </TouchableOpacity>
             </View>
-          ) : jobs.length === 0 ? (
+          ) : filteredJobs.length === 0 ? (
             <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-              <Ionicons name="briefcase-outline" size={48} color="#9EA3A7" />
+              <Ionicons name="briefcase-outline" size={48} color={colors.textSecondary} />
               <Text style={{ marginTop: 10, color: colors.textSecondary }}>No jobs found</Text>
             </View>
           ) : (
-            jobs.map((job) => (
+            filteredJobs.map((job) => (
               <JobCard 
                 key={job.id} 
                 job={job} 
@@ -262,7 +264,7 @@ function JobCard({ job, onPress, onSave }: { job: Job, onPress: () => void, onSa
   return (
     <TouchableOpacity 
       onPress={onPress}
-      style={[styles.card, { borderColor: '#E1E4E8' }]}
+      style={[styles.card, { borderColor: colors.gray250, backgroundColor: colors.bglight01 }]}
     >
       <View style={styles.cardHeader}>
         <View style={styles.logoAndHeader}>
@@ -276,29 +278,31 @@ function JobCard({ job, onPress, onSave }: { job: Job, onPress: () => void, onSa
                     <Text style={styles.typeBadgeText}>{job.type}</Text>
                 </View>
             </View>
-            <Text style={styles.companyName}>{job.company}</Text>
+            <Text style={[styles.companyName, { color: colors.text }]}>{job.company}</Text>
           </View>
         </View>
       </View>
 
-      <Text style={styles.jobTitle}>{job.title}</Text>
+      <Text style={[styles.jobTitle, { color: colors.text }]}>{job.title}</Text>
       
       <View style={styles.metaRow}>
-        <Ionicons name="location-outline" size={16} color="#9EA3A7" />
-        <Text style={styles.metaText}>{job.location}</Text>
+        <Ionicons name="location-outline" size={16} color={colors.textSecondary} />
+        <Text style={[styles.metaText, { color: colors.textSecondary }]}>{job.location}</Text>
       </View>
       
       <View style={styles.metaRow}>
-        <Ionicons name="cash-outline" size={16} color="#9EA3A7" />
-        <Text style={styles.metaText}>{job.salary}</Text>
+        <Ionicons name="cash-outline" size={16} color={colors.textSecondary} />
+        <Text style={[styles.metaText, { color: colors.textSecondary }]}>{job.salary}</Text>
       </View>
 
       <View style={styles.cardFooter}>
         <View style={styles.daysToApplyBadge}>
-            <Text style={styles.daysToApplyText}>{job.daysLeft} days to apply</Text>
+            <Text style={styles.daysToApplyText}>
+              {job.daysLeft === 1 ? '1 day to apply' : `${job.daysLeft} days to apply`}
+            </Text>
         </View>
-        <TouchableOpacity onPress={onSave} style={styles.bookmarkButton}>
-            <Ionicons name={job.isSaved ? "bookmark" : "bookmark-outline"} size={20} color={job.isSaved ? colors.primary : "#9EA3A7"} />
+        <TouchableOpacity onPress={onSave} style={[styles.bookmarkButton, { backgroundColor: colors.bglight01, borderColor: colors.gray250 }]}>
+            <Ionicons name={job.isSaved ? "bookmark" : "bookmark-outline"} size={20} color={job.isSaved ? colors.primary : colors.textSecondary} />
         </TouchableOpacity>
       </View>
     </TouchableOpacity>

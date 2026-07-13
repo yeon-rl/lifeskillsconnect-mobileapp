@@ -22,7 +22,7 @@ import {
   Text,
   View
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { toast } from 'sonner-native';
 import { CourseProp, Resource, Assessment, userCourseProp } from '@/store/courseStore';
@@ -148,17 +148,18 @@ const NavigateMinimizeIcon = ({ color }: { color: string }) => (
 
 export default function ModuleDetailScreen() {
   const { id, justEnrolled } = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const colors = useThemedColors();
   const [activeTab, setActiveTab] = useState<Tab>("lessons");
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [showEnrolledModal, setShowEnrolledModal] = useState(justEnrolled === 'true');
   
+  const { currentUser, authToken } = useUserStore();
+
   // Dynamic course fetching
   const { course: fetchedCourse, isLoading, error, refetch } = useFetchCourseById(typeof id === 'string' ? id : null, authToken || undefined);
   const { getUserCourseById } = useCoursesStore();
-
-  const { currentUser, authToken } = useUserStore();
 
   
   // State for Lessons/Resources
@@ -938,11 +939,11 @@ export default function ModuleDetailScreen() {
     
     return (
       <ThemedView style={{ flex: 1 }}>
-        <SafeAreaView style={styles.videoHeader}>
+        <View style={[styles.videoHeader, { paddingTop: Math.max(insets.top, 10), backgroundColor: 'rgba(0,0,0,0.3)', position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }]}>
             <Pressable onPress={() => setAssessmentResult(null)} style={styles.videoBackButton}>
-                <BackIcon color={colors.text} />
+                <BackIcon color="white" />
             </Pressable>
-        </SafeAreaView>
+        </View>
         <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 }}>
           <View style={{ padding: 32, backgroundColor: colors.bglight01, borderRadius: 16, width: '100%', alignItems: 'center' }}>
             <View style={{ 
@@ -1345,11 +1346,11 @@ export default function ModuleDetailScreen() {
       <Pressable onPress={() => (!isCoursePassed || isReviewing) && setShowControls(!showControls)} style={[{ backgroundColor: 'black', position: 'relative' }, (isFullscreen ? { width: '100%', height: '100%', position: 'absolute', zIndex: 999 } : { height: 300 }) as any]}>
         {isCoursePassed && !isReviewing ? (
           <View style={[StyleSheet.absoluteFillObject, { justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: '#1A1A1A' }]}>
-            <SafeAreaView style={[styles.videoHeader, { top: 10 }]}>
+            <View style={[styles.videoHeader, { paddingTop: isFullscreen ? insets.top : 10 }]}>
                 <Pressable onPress={handleBack} style={styles.videoBackButton}>
                     <BackIcon color="white" />
                 </Pressable>
-            </SafeAreaView>
+            </View>
 
             <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: '#34A85322', justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
               <CheckCircleIcon color="#34A853" />
@@ -1419,13 +1420,13 @@ export default function ModuleDetailScreen() {
             
             {/* Controls Overlay */}
             {showControls && (
-                <View style={StyleSheet.absoluteFillObject}>
+                <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.4)', zIndex: 10, elevation: 10 }]}>
                     {/* Top Bar: Back Button */}
-                     <SafeAreaView style={styles.videoHeader}>
+                     <View style={[styles.videoHeader, { paddingTop: isFullscreen ? insets.top : 10 }]}>
                         <Pressable onPress={handleBack} style={styles.videoBackButton}>
                             <BackIcon color="white" />
                         </Pressable>
-                    </SafeAreaView>
+                    </View>
 
                     {/* Center Controls: Play/Pause */}
                     <View style={styles.playControls}>
@@ -1484,11 +1485,11 @@ export default function ModuleDetailScreen() {
         {/* Completion Overlay */}
         {showCompletionOverlay && (
             <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', zIndex: 20 }]}>
-                <SafeAreaView style={[styles.videoHeader, { top: 10 }]}>
+                <View style={[styles.videoHeader, { paddingTop: isFullscreen ? insets.top : 10 }]}>
                     <Pressable onPress={() => setShowCompletionOverlay(false)} style={styles.videoBackButton}>
                         <BackIcon color="white" />
                     </Pressable>
-                </SafeAreaView>
+                </View>
 
                 <View style={{ width: '80%', alignItems: 'center', padding: 20 }}>
                     <Text style={{ color: 'white', fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 }}>

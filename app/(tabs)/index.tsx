@@ -243,6 +243,7 @@ export default function HomeScreen() {
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         contentInsetAdjustmentBehavior="never"
+        contentContainerStyle={{ paddingBottom: 120 }}
       >
         <View className="mb-6">
           {/* Banner Carousel */}

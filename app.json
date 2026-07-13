@@ -14,7 +14,7 @@
       "backgroundColor": "#5A7C65"
     },
     "ios": {
-      "buildNumber": "7",
+      "buildNumber": "9",
       "bundleIdentifier": "com.accordiaharmony.lifeskills",
       "supportsTablet": true,
       "splash": {

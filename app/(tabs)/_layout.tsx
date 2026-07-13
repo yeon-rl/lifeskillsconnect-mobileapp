@@ -50,7 +50,27 @@ export default function TabLayout() {
           },
           tabBarBackground: () => (
             <View style={[StyleSheet.absoluteFill, { borderRadius: 30, overflow: 'hidden' }]}>
-              <BlurView intensity={60} style={StyleSheet.absoluteFill} tint={colorScheme === "dark" ? "dark" : "light"} />
+              {Platform.OS === "ios" ? (
+                <BlurView
+                  intensity={60}
+                  style={StyleSheet.absoluteFill}
+                  tint={colorScheme === "dark" ? "dark" : "light"}
+                />
+              ) : (
+                // Android: BlurView native module is not always available in production.
+                // Use a semi-transparent background that mimics the frosted glass look.
+                <View
+                  style={[
+                    StyleSheet.absoluteFill,
+                    {
+                      backgroundColor:
+                        colorScheme === "dark"
+                          ? "rgba(30, 40, 35, 0.88)"
+                          : "rgba(240, 248, 242, 0.88)",
+                    },
+                  ]}
+                />
+              )}
               <View style={[StyleSheet.absoluteFill, { backgroundColor: "#5A7C6517" }]} />
             </View>
           ),
@@ -134,7 +154,8 @@ export default function TabLayout() {
         />
       </Tabs>
       
-      {/* Floating Chatbot Button */}
+      {/* Floating Chatbot Button - Temporarily Hidden */}
+      {/* 
       <TouchableOpacity
         style={{
           position: "absolute",
@@ -169,22 +190,19 @@ export default function TabLayout() {
             </Defs>
             <Circle cx="30" cy="30" r="30" fill="url(#paint0_linear)"/>
             
-            {/* Robot Face Logic - matching the style of the image somewhat */}
-             <Path d="M20 25C20 22.2386 22.2386 20 25 20H35C37.7614 20 40 22.2386 40 25V35C40 37.7614 37.7614 40 35 40H25C22.2386 40 20 37.7614 20 35V25Z" stroke="white" strokeWidth="2.5" strokeLinejoin="round" />
+            <Path d="M20 25C20 22.2386 22.2386 20 25 20H35C37.7614 20 40 22.2386 40 25V35C40 37.7614 37.7614 40 35 40H25C22.2386 40 20 37.7614 20 35V25Z" stroke="white" strokeWidth="2.5" strokeLinejoin="round" />
             
-            {/* Eyes */}
             <Circle cx="26" cy="28" r="2.5" fill="white"/>
             <Circle cx="34" cy="28" r="2.5" fill="white"/>
             
-            {/* Smile */}
             <Path d="M27 34C27 34 28.5 35.5 30 35.5C31.5 35.5 33 34 33 34" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
 
-            {/* Antennas */}
             <Path d="M30 20V16" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
             <Circle cx="30" cy="14" r="2" fill="white"/>
 
         </Svg>
       </TouchableOpacity>
+      */}
     </View>
   );
 }

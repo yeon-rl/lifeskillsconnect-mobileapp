@@ -277,62 +277,87 @@ export default function WellbeingCheck() {
     </View>
   );
 
-  const renderStep4 = () => (
-    <View style={styles.stepContainer}>
-      <View style={styles.resultHeader}>
-        <View style={[styles.scoreCircle, { borderColor: colors.primary + '20' }]}>
-          <Text style={[styles.scoreText, { color: colors.primary }]}>{resultData.aggregate_rating}</Text>
-          <Text style={styles.scoreLabel}>Wellbeing Score</Text>
-        </View>
+  const renderStep4 = () => {
+    const isLowScore = resultData.aggregate_rating < 3.0 || resultData.is_flagged;
+    const hasPrevious = !!resultData.previous_result;
+    
+    let improvement = 0;
+    let isImprovement = true;
+    if (hasPrevious) {
+      improvement = resultData.aggregate_rating - resultData.previous_result.aggregate_rating;
+      isImprovement = improvement >= 0;
+    }
+
+    return (
+      <View style={styles.stepContainer}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 40, alignItems: 'center' }}>
+          
+          <ThemedText style={styles.resultMainTitle}>Your Wellbeing Score</ThemedText>
+          <ThemedText style={styles.resultSubText}>
+            Thank you for completing the assessment. Here is your current wellbeing rating based on your responses.
+          </ThemedText>
+
+          <View style={styles.scoreBox}>
+            <Text style={styles.scoreBigText}>{resultData.aggregate_rating}</Text>
+            <View style={styles.scoreDividerContainer}>
+              <View style={styles.scoreDivider} />
+              <Text style={styles.scoreOutofText}>OUT OF 5.0</Text>
+              <View style={styles.scoreDivider} />
+            </View>
+          </View>
+
+          {hasPrevious && (
+            <View style={[styles.improvementBox, { backgroundColor: isImprovement ? '#ECFDF5' : '#FEF2F2' }]}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <View>
+                  <Text style={[styles.improvementLabel, { color: isImprovement ? '#059669' : '#DC2626' }]}>
+                    {isImprovement ? 'IMPROVEMENT' : 'DECLINE'} SINCE LAST CHECK
+                  </Text>
+                  <Text style={styles.previousScoreText}>
+                    Previous score: {resultData.previous_result.aggregate_rating} / 5.0
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name={isImprovement ? "chevron-up" : "chevron-down"} size={24} color={isImprovement ? '#059669' : '#DC2626'} style={{ marginRight: 4 }} />
+                  <Text style={[styles.improvementValue, { color: isImprovement ? '#059669' : '#DC2626' }]}>
+                    {isImprovement ? '+' : ''}{improvement.toFixed(2)}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {isLowScore && (
+            <View style={styles.warningBox}>
+              <View style={styles.warningHeader}>
+                <Ionicons name="warning-outline" size={22} color="#9A3412" />
+                <Text style={styles.warningTitle}>Please talk to someone</Text>
+              </View>
+              <Text style={styles.warningText}>
+                Your wellbeing score is currently low, and we want to make sure you're supported. Consider talking to someone you trust, or use our specialized resources.
+              </Text>
+              <View style={styles.warningButtonsRow}>
+                <TouchableOpacity style={styles.crisisHelpButton}>
+                  <Text style={styles.crisisHelpButtonText}>Crisis Help</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.anonymousChatButton}>
+                  <Text style={styles.anonymousChatButtonText}>Anonymous Chat</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+        </ScrollView>
+
+        <TouchableOpacity 
+          style={styles.doneButton}
+          onPress={() => router.replace('/(tabs)')}
+        >
+          <Text style={styles.doneButtonText}>Done</Text>
+        </TouchableOpacity>
       </View>
-
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={[styles.resultCard, { backgroundColor: colors.modalBg }]}>
-          <ThemedText type="subtitle" style={styles.cardTitle}>Current Result</ThemedText>
-          <View style={styles.resultRow}>
-            <Text style={[styles.resultLabel, { color: colors.textSecondary }]}>Total Score:</Text>
-            <Text style={[styles.resultValue, { color: colors.text }]}>{resultData.total_score}</Text>
-          </View>
-          <View style={styles.resultRow}>
-            <Text style={[styles.resultLabel, { color: colors.textSecondary }]}>Status:</Text>
-            <Text style={[styles.resultValue, { color: resultData.is_flagged ? '#EF4444' : '#10B981' }]}>
-              {resultData.is_flagged ? 'Flagged' : 'Normal'}
-            </Text>
-          </View>
-        </View>
-
-        {resultData.previous_result && (
-          <View style={[styles.resultCard, { backgroundColor: colors.modalBg }]}>
-            <ThemedText type="subtitle" style={styles.cardTitle}>Previous Result</ThemedText>
-            <View style={styles.resultRow}>
-              <Text style={[styles.resultLabel, { color: colors.textSecondary }]}>Previous Score:</Text>
-              <Text style={[styles.resultValue, { color: colors.text }]}>{resultData.previous_result.total_score}</Text>
-            </View>
-            <View style={styles.resultRow}>
-              <Text style={[styles.resultLabel, { color: colors.textSecondary }]}>Previous Rating:</Text>
-              <Text style={[styles.resultValue, { color: colors.text }]}>{resultData.previous_result.aggregate_rating}</Text>
-            </View>
-          </View>
-        )}
-
-        {resultData.comparison && (
-          <View style={[styles.resultCard, { backgroundColor: colors.modalBg }]}>
-            <ThemedText type="subtitle" style={styles.cardTitle}>Comparison</ThemedText>
-            <Text style={[styles.comparisonText, { color: resultData.comparison.status === 'decline' ? '#EF4444' : '#10B981' }]}>
-              {resultData.comparison.message}
-            </Text>
-          </View>
-        )}
-      </ScrollView>
-
-      <TouchableOpacity 
-        style={[styles.primaryButton, { backgroundColor: colors.primary, marginTop: 'auto', marginBottom: 20 }]}
-        onPress={() => router.replace('/(tabs)')}
-      >
-        <Text style={styles.buttonText}>Go to Dashboard</Text>
-      </TouchableOpacity>
-    </View>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -609,4 +634,145 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontWeight: '500',
   },
+  // New Result Design Styles
+  resultMainTitle: {
+    fontSize: 26,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 12,
+    color: '#0F172A',
+  },
+  resultSubText: {
+    fontSize: 15,
+    textAlign: 'center',
+    color: '#64748B',
+    lineHeight: 22,
+    marginBottom: 30,
+    paddingHorizontal: 10,
+  },
+  scoreBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 24,
+    paddingVertical: 40,
+    paddingHorizontal: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  scoreBigText: {
+    fontSize: 72,
+    fontWeight: '800',
+    color: '#5A7C65',
+    marginBottom: 10,
+  },
+  scoreDividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: 140,
+  },
+  scoreDivider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E2E8F0',
+  },
+  scoreOutofText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#94A3B8',
+    letterSpacing: 2,
+    marginHorizontal: 10,
+  },
+  improvementBox: {
+    width: '100%',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+  },
+  improvementLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  previousScoreText: {
+    fontSize: 14,
+    color: '#64748B',
+  },
+  improvementValue: {
+    fontSize: 28,
+    fontWeight: '700',
+  },
+  warningBox: {
+    backgroundColor: '#FFF7ED',
+    borderRadius: 16,
+    padding: 20,
+    width: '100%',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#FFEDD5',
+  },
+  warningHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  warningTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#9A3412',
+    marginLeft: 8,
+  },
+  warningText: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#9A3412',
+    opacity: 0.9,
+    marginBottom: 20,
+  },
+  warningButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  crisisHelpButton: {
+    backgroundColor: '#EA580C',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  crisisHelpButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  anonymousChatButton: {
+    backgroundColor: '#FFEDD5',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  anonymousChatButtonText: {
+    color: '#9A3412',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  doneButton: {
+    backgroundColor: '#5A7C65',
+    borderRadius: 12,
+    paddingVertical: 16,
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  doneButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+  }
 });

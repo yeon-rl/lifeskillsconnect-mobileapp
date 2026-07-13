@@ -58,17 +58,18 @@ export default function SafeSpace() {
     let locationSubscription: Location.LocationSubscription | null = null;
 
     (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setErrorMsg('Permission to access location was denied');
-        setLoading(false);
-        return;
-      }
+      try {
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          setErrorMsg('Permission to access location was denied');
+          setLoading(false);
+          return;
+        }
 
-      // Initial location
-      let location = await Location.getCurrentPositionAsync({});
-      setUserLocation(location);
-      setLoading(false);
+        // Initial location
+        let location = await Location.getCurrentPositionAsync({});
+        setUserLocation(location);
+        setLoading(false);
 
       // Watch for movement
       locationSubscription = await Location.watchPositionAsync(
@@ -80,6 +81,10 @@ export default function SafeSpace() {
           setUserLocation(newLocation);
         }
       );
+      } catch (err: any) {
+        setErrorMsg(err.message || 'Error fetching location');
+        setLoading(false);
+      }
     })();
 
     return () => {
@@ -225,7 +230,7 @@ export default function SafeSpace() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={[styles.header, showMap && styles.overlayHeader, { backgroundColor: showMap ? 'rgba(255,255,255,0.9)' : colors.background }]}>
+      <View style={[styles.header, showMap && styles.overlayHeader, { backgroundColor: showMap ? colors.modalBg : colors.background }]}>
         <TouchableOpacity 
           style={styles.backButton}
           onPress={() => router.back()}
@@ -288,7 +293,7 @@ export default function SafeSpace() {
               filteredSafeSpaces.map((space) => (
                 <TouchableOpacity 
                   key={space.id} 
-                  style={[styles.listCard, { backgroundColor: colors.modalBg }]}
+                  style={[styles.listCard, { backgroundColor: colors.modalBg, borderColor: colors.gray250 }]}
                   onPress={() => {
                     setSelectedSpace(space);
                     setActiveSpace(space);
@@ -372,7 +377,7 @@ export default function SafeSpace() {
                   strokeWidth={1}
                 />
                 
-                { (showRoute || isNavigating) && activeSpace && (
+                { (showRoute || isNavigating) && activeSpace && GOOGLE_MAPS_APIKEY ? (
                   <MapViewDirections
                     origin={{
                       latitude: userLocation.coords.latitude,
@@ -387,8 +392,11 @@ export default function SafeSpace() {
                     strokeColor="#2C64C6"
                     optimizeWaypoints={true}
                     onReady={onDirectionsReady}
+                    onError={(errorMessage) => {
+                      console.error('Directions API Error:', errorMessage);
+                    }}
                   />
-                )}
+                ) : null}
 
                 {filteredSafeSpaces.map(space => (
                   <Marker
@@ -421,7 +429,7 @@ export default function SafeSpace() {
                 </TouchableOpacity>
 
                 <TouchableOpacity 
-                  style={styles.mapListToggleButton}
+                  style={[styles.mapListToggleButton, { backgroundColor: colors.modalBg }]}
                   onPress={() => setShowMap(false)}
                 >
                   <Ionicons name="list" size={24} color="#5A7C65" />
@@ -474,7 +482,7 @@ export default function SafeSpace() {
 
                             {/* Summary View if Route is Shown but Navigation Not Started */}
                             {showRoute && navigationData && !isNavigating ? (
-                               <View style={styles.previewStatsRow}>
+                               <View style={[styles.previewStatsRow, { backgroundColor: colors.background }]}>
                                   <View style={styles.previewStat}>
                                     <Text style={styles.previewStatLabel}>Distance</Text>
                                     <Text style={[styles.previewStatValue, { color: colors.text }]}>{navigationData.distance.toFixed(1)} km</Text>
@@ -497,7 +505,7 @@ export default function SafeSpace() {
                                     {getNearbySpaces(selectedSpace).map((nearby) => (
                                       <TouchableOpacity 
                                         key={nearby.id} 
-                                        style={[styles.nearbyCard, { backgroundColor: colors.background }]}
+                                        style={[styles.nearbyCard, { backgroundColor: colors.background, borderColor: colors.gray250 }]}
                                         onPress={() => {
                                           setSelectedSpace(nearby);
                                           setActiveSpace(nearby);
@@ -585,7 +593,7 @@ export default function SafeSpace() {
                             {showFullSteps && (
                                <ScrollView style={styles.stepsScrollCompact} nestedScrollEnabled={true}>
                                   {navigationData?.legs?.[0]?.steps?.map((step: any, idx: number) => (
-                                     <View key={idx} style={styles.stepRowCompact}>
+                                     <View key={idx} style={[styles.stepRowCompact, { borderBottomColor: colors.gray250 }]}>
                                      <Ionicons 
                                         name={step.maneuver?.includes('left') ? 'arrow-back' : step.maneuver?.includes('right') ? 'arrow-forward' : 'arrow-up'} 
                                         size={16} 
@@ -978,14 +986,12 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F8FAFC',
   },
   mapError: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
-    backgroundColor: '#FFF5F5',
   },
   errorText: {
     marginTop: 10,
@@ -1010,7 +1016,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 10,
-    backgroundColor: 'rgba(255,255,255,0.85)',
     paddingBottom: 15,
   },
   fullMapContainer: {
@@ -1046,7 +1051,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   mapListToggleButton: {
-    backgroundColor: 'white',
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -1169,7 +1173,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 20,
     marginBottom: 15,
-    backgroundColor: '#F8FAFC',
     padding: 12,
     borderRadius: 12,
   },
@@ -1214,7 +1217,6 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: '#F8FAFC',
     padding: 12,
     borderRadius: 12,
     marginBottom: 15,
@@ -1385,7 +1387,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
   },
   listCardIcon: {
     width: 48,
@@ -1453,8 +1454,6 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
-    backgroundColor: 'white',
   },
   nearbyIcon: {
     width: 36,

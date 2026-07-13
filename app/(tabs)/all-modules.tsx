@@ -181,6 +181,7 @@ export default function AllModules() {
                         </View>
                     )}
                     ListEmptyComponent={<Text style={{alignSelf: 'center', marginTop: 20, color: '#666'}}>No modules found</Text>}
+                    ListFooterComponent={<View style={{height: 120}} />}
                 />
             </View>
          ) : (
@@ -193,7 +194,7 @@ export default function AllModules() {
                     {renderSection(category, groupedCourses[category])}
                 </React.Fragment>
             ))}
-            <View style={{height: 100}} /> 
+            <View style={{height: 120}} />
         </ScrollView>
       )}
 

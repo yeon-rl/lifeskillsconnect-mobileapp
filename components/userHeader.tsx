@@ -223,7 +223,7 @@ const UserHeader = () => {
               <ThemedText type="small" className="mb-2 mt-4" style={{ color: colors.textSecondary, fontSize: 13 }}>Others</ThemedText>
               <Pressable onPress={() => handleDrawerNavigation("/jobs")} className="py-3 px-3 mb-1 flex-row items-center">
                 <Feather name="briefcase" size={20} color={colors.textSecondary} />
-                <ThemedText className="ml-3 font-medium text-base" style={{ color: colors.textSecondary }}>Job Feed</ThemedText>
+                <ThemedText className="ml-3 font-medium text-base" style={{ color: colors.textSecondary }}>Job Feeds</ThemedText>
               </Pressable>
               <Pressable onPress={() => handleDrawerNavigation("/reward-points")} className="py-3 px-3 mb-1 flex-row items-center">
                 <Feather name="award" size={20} color={colors.textSecondary} />
@@ -231,7 +231,7 @@ const UserHeader = () => {
               </Pressable>
               <Pressable onPress={() => handleDrawerNavigation("/wellbeing-check")} className="py-3 px-3 mb-1 flex-row items-center">
                 <Feather name="smile" size={20} color={colors.textSecondary} />
-                <ThemedText className="ml-3 font-medium text-base" style={{ color: colors.textSecondary }}>Well - being</ThemedText>
+                <ThemedText className="ml-3 font-medium text-base" style={{ color: colors.textSecondary }}>Wellbeing Check</ThemedText>
               </Pressable>
 
             </ScrollView>
